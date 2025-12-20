@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
     first_name VARCHAR(100),
     last_name VARCHAR(100),
     phone VARCHAR(20),
+    role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('user', 'admin', 'superadmin')),
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -38,7 +39,7 @@ CREATE TABLE IF NOT EXISTS categories (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Products table
+-- Products table (YouTube videos as products)
 CREATE TABLE IF NOT EXISTS products (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
@@ -47,6 +48,9 @@ CREATE TABLE IF NOT EXISTS products (
     price DECIMAL(10, 2) NOT NULL,
     discount_price DECIMAL(10, 2),
     stock INTEGER DEFAULT 0,
+    youtube_video_id VARCHAR(100),
+    youtube_thumbnail VARCHAR(500),
+    youtube_duration VARCHAR(20),
     image_url VARCHAR(500),
     images JSONB DEFAULT '[]',
     is_active BOOLEAN DEFAULT true,
@@ -107,6 +111,7 @@ CREATE TABLE IF NOT EXISTS order_items (
 
 -- Create indexes for better performance
 CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_role ON users(role);
 CREATE INDEX idx_products_category ON products(category_id);
 CREATE INDEX idx_products_active ON products(is_active);
 CREATE INDEX idx_carts_user ON carts(user_id);
@@ -124,13 +129,19 @@ INSERT INTO categories (name, description, is_active) VALUES
 ('Deportes', 'Equipamiento deportivo', true),
 ('Libros', 'Libros y revistas', true);
 
--- Insert sample products
-INSERT INTO products (category_id, name, description, price, stock, is_active) VALUES
-((SELECT id FROM categories WHERE name = 'Electrónica'), 'Laptop Pro 15"', 'Laptop de alto rendimiento con 16GB RAM', 1299.99, 10, true),
-((SELECT id FROM categories WHERE name = 'Electrónica'), 'Auriculares Bluetooth', 'Auriculares inalámbricos con cancelación de ruido', 149.99, 25, true),
-((SELECT id FROM categories WHERE name = 'Ropa'), 'Camiseta Deportiva', 'Camiseta de alto rendimiento', 29.99, 50, true),
-((SELECT id FROM categories WHERE name = 'Hogar'), 'Cafetera Automática', 'Cafetera programable de 12 tazas', 89.99, 15, true),
-((SELECT id FROM categories WHERE name = 'Deportes'), 'Balón de Fútbol', 'Balón profesional tamaño 5', 39.99, 30, true);
+-- Create super admin user (julioleon2004@gmail.com)
+-- Password: Admin123!
+INSERT INTO users (email, password_hash, first_name, last_name, role, is_active) VALUES
+('julioleon2004@gmail.com', '$2a$10$NkPYpYMuJWcGVKu4JY1og.XvqYQer2D1fqJbWPYhvrBL2Bdhb3QnC', 'Julio', 'León', 'superadmin', true)
+ON CONFLICT (email) DO NOTHING;
+
+-- Insert sample products with YouTube videos
+INSERT INTO products (category_id, name, description, price, stock, youtube_video_id, youtube_thumbnail, is_active) VALUES
+((SELECT id FROM categories WHERE name = 'Electrónica'), 'Flutter Tutorial Completo', 'Aprende Flutter desde cero', 29.99, 999, 'CD1Y2DJL81M', 'https://i.ytimg.com/vi/CD1Y2DJL81M/mqdefault.jpg', true),
+((SELECT id FROM categories WHERE name = 'Electrónica'), 'Node.js Crash Course', 'Curso intensivo de Node.js', 39.99, 999, 'fBNz5xF-Kx4', 'https://i.ytimg.com/vi/fBNz5xF-Kx4/mqdefault.jpg', true),
+((SELECT id FROM categories WHERE name = 'Deportes'), 'Yoga para Principiantes', 'Clase de yoga completa', 19.99, 999, 'v7AYKMP6rOE', 'https://i.ytimg.com/vi/v7AYKMP6rOE/mqdefault.jpg', true),
+((SELECT id FROM categories WHERE name = 'Hogar'), 'Recetas Fáciles y Rápidas', 'Cocina deliciosa en minutos', 24.99, 999, 'kP3wnYe6Mz0', 'https://i.ytimg.com/vi/kP3wnYe6Mz0/mqdefault.jpg', true),
+((SELECT id FROM categories WHERE name = 'Libros'), 'Audiolibro de Motivación', 'Desarrolla tu mentalidad ganadora', 34.99, 999, '5MgBikgcWnY', 'https://i.ytimg.com/vi/5MgBikgcWnY/mqdefault.jpg', true);
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

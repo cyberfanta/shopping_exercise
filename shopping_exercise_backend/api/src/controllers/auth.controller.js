@@ -28,15 +28,15 @@ const authController = {
 
       // Create user
       const result = await pool.query(
-        'INSERT INTO users (email, password_hash, first_name, last_name, phone) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, first_name, last_name, phone, created_at',
-        [email, password_hash, first_name, last_name, phone || null]
+        'INSERT INTO users (email, password_hash, first_name, last_name, phone, role) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, email, first_name, last_name, phone, role, created_at',
+        [email, password_hash, first_name, last_name, phone || null, 'user']
       );
 
       const user = result.rows[0];
 
       // Generate JWT
       const token = jwt.sign(
-        { id: user.id, email: user.email },
+        { id: user.id, email: user.email, role: user.role },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN }
       );
@@ -64,7 +64,7 @@ const authController = {
 
       // Find user
       const result = await pool.query(
-        'SELECT id, email, password_hash, first_name, last_name, phone, is_active FROM users WHERE email = $1',
+        'SELECT id, email, password_hash, first_name, last_name, phone, role, is_active FROM users WHERE email = $1',
         [email]
       );
 
@@ -86,7 +86,7 @@ const authController = {
 
       // Generate JWT
       const token = jwt.sign(
-        { id: user.id, email: user.email },
+        { id: user.id, email: user.email, role: user.role },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN }
       );
@@ -188,7 +188,7 @@ const authController = {
   async getCurrentUser(req, res) {
     try {
       const result = await pool.query(
-        'SELECT id, email, first_name, last_name, phone, created_at FROM users WHERE id = $1',
+        'SELECT id, email, first_name, last_name, phone, role, created_at FROM users WHERE id = $1',
         [req.user.id]
       );
 
