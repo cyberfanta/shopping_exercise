@@ -1,0 +1,66 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: shopping_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: shopping_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - shopping_network
+
+  # Backend API
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: shopping_api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres123@postgres:5432/shopping_db
+      JWT_SECRET: your-super-secret-jwt-key-change-in-production
+      JWT_EXPIRES_IN: 7d
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USER: your-email@gmail.com
+      SMTP_PASS: your-app-password
+      SMTP_FROM: noreply@shopping.com
+      FRONTEND_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+    volumes:
+      - ./api:/app
+      - /app/node_modules
+    networks:
+      - shopping_network
+
+  # Adminer - Database Management UI
+  adminer:
+    image: adminer:latest
+    container_name: shopping_adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    networks:
+      - shopping_network
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+
+networks:
+  shopping_network:
+    driver: bridge
+
