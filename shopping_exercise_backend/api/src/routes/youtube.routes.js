@@ -16,3 +16,4 @@ router.get('/video/:videoId', authMiddleware, youtubeController.getVideoDetails)
 
 module.exports = router;
 
+

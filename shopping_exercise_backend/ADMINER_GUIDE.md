@@ -43,3 +43,4 @@ SELECT name, price, stock, youtube_video_id FROM products;
 SELECT name, description FROM categories;
 ```
 
+
