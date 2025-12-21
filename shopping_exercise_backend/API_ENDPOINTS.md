@@ -636,6 +636,245 @@ Authorization: Bearer {token}
 
 ---
 
+## 🛒 Gestión de Carritos (Admin)
+
+### Listar Todos los Carritos (Admin)
+```http
+GET /admin/carts?page=1&limit=20
+Authorization: Bearer {token}
+```
+
+**Parámetros de Query:**
+- `page` (opcional): Número de página (por defecto: 1)
+- `limit` (opcional): Carritos por página (por defecto: 20)
+
+**Respuesta:**
+```json
+{
+  "carts": [
+    {
+      "cart_id": "uuid",
+      "user_id": "uuid",
+      "user_email": "usuario@ejemplo.com",
+      "first_name": "Juan",
+      "last_name": "Pérez",
+      "items_count": 3,
+      "subtotal": "84.97",
+      "updated_at": "2025-12-20T10:00:00.000Z",
+      "items": [
+        {
+          "id": "uuid",
+          "product_id": "uuid",
+          "product_name": "Tutorial de Flutter",
+          "price": 29.99,
+          "quantity": 2,
+          "subtotal": 59.98,
+          "youtube_thumbnail": "https://i.ytimg.com/vi/..."
+        }
+      ]
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "totalItems": 5,
+    "totalPages": 1
+  }
+}
+```
+
+**Nota:** Solo muestra carritos con items.
+
+---
+
+### Obtener Carrito por Usuario (Admin)
+```http
+GET /admin/carts/{userId}
+Authorization: Bearer {token}
+```
+
+**Respuesta:**
+```json
+{
+  "cart": {
+    "cart_id": "uuid",
+    "user_id": "uuid",
+    "user_email": "usuario@ejemplo.com",
+    "first_name": "Juan",
+    "last_name": "Pérez",
+    "items_count": 2,
+    "subtotal": "54.98",
+    "updated_at": "2025-12-20T10:00:00.000Z",
+    "items": [ ... ]
+  }
+}
+```
+
+---
+
+### Vaciar Carrito de Usuario (Admin)
+```http
+DELETE /admin/carts/{userId}
+Authorization: Bearer {token}
+```
+
+**Respuesta:**
+```json
+{
+  "message": "Cart cleared successfully"
+}
+```
+
+---
+
+### Estadísticas de Carritos (Admin)
+```http
+GET /admin/carts-stats
+Authorization: Bearer {token}
+```
+
+**Respuesta:**
+```json
+{
+  "stats": {
+    "total_carts": 10,
+    "total_items": 25,
+    "total_value": "1245.50",
+    "average_cart_value": "124.55",
+    "carts_with_items": 8
+  }
+}
+```
+
+---
+
+## 📦 Gestión de Pedidos (Admin)
+
+### Listar Todos los Pedidos (Admin)
+```http
+GET /admin/orders?page=1&limit=20&status=pending
+Authorization: Bearer {token}
+```
+
+**Parámetros de Query:**
+- `page` (opcional): Número de página (por defecto: 1)
+- `limit` (opcional): Pedidos por página (por defecto: 20)
+- `status` (opcional): Filtrar por estado (`pending`, `confirmed`, `processing`, `shipped`, `delivered`, `cancelled`)
+
+**Respuesta:**
+```json
+{
+  "orders": [
+    {
+      "id": "uuid",
+      "user_id": "uuid",
+      "order_number": "ORD-1234567890-ABC123",
+      "status": "confirmed",
+      "subtotal": "84.97",
+      "tax": "8.50",
+      "shipping": "5.00",
+      "total": "98.47",
+      "payment_status": "paid",
+      "payment_method": "credit_card",
+      "shipping_address": {
+        "street": "Calle Principal 123",
+        "city": "Madrid",
+        "state": "Madrid",
+        "zipCode": "28001",
+        "country": "España"
+      },
+      "user_email": "usuario@ejemplo.com",
+      "user_first_name": "Juan",
+      "user_last_name": "Pérez",
+      "items_count": 2,
+      "created_at": "2025-12-20T10:00:00.000Z",
+      "updated_at": "2025-12-20T10:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "totalItems": 15,
+    "totalPages": 1
+  }
+}
+```
+
+**Nota:** Incluye información del usuario que realizó el pedido.
+
+---
+
+### Obtener Detalle de Pedido (Admin)
+```http
+GET /admin/orders/{orderId}
+Authorization: Bearer {token}
+```
+
+**Respuesta:**
+```json
+{
+  "order": {
+    "id": "uuid",
+    "user_id": "uuid",
+    "order_number": "ORD-1234567890-ABC123",
+    "status": "confirmed",
+    "subtotal": "84.97",
+    "tax": "8.50",
+    "shipping": "5.00",
+    "total": "98.47",
+    "payment_status": "paid",
+    "payment_method": "credit_card",
+    "shipping_address": { ... },
+    "user_email": "usuario@ejemplo.com",
+    "user_first_name": "Juan",
+    "user_last_name": "Pérez",
+    "created_at": "2025-12-20T10:00:00.000Z",
+    "updated_at": "2025-12-20T10:00:00.000Z",
+    "items": [
+      {
+        "id": "uuid",
+        "product_id": "uuid",
+        "product_name": "Tutorial de Flutter Completo",
+        "product_description": "Aprende Flutter desde cero",
+        "quantity": 2,
+        "unit_price": 29.99,
+        "subtotal": 59.98,
+        "youtube_thumbnail": "https://i.ytimg.com/vi/..."
+      },
+      {
+        "id": "uuid",
+        "product_id": "uuid",
+        "product_name": "React.js para Principiantes",
+        "product_description": "Guía completa para empezar con React.js",
+        "quantity": 1,
+        "unit_price": 24.99,
+        "subtotal": 24.99,
+        "youtube_thumbnail": "https://i.ytimg.com/vi/..."
+      }
+    ]
+  }
+}
+```
+
+---
+
+### Cancelar Pedido (Admin)
+```http
+DELETE /admin/orders/{orderId}
+Authorization: Bearer {token}
+```
+
+**Respuesta:**
+```json
+{
+  "message": "Order cancelled successfully"
+}
+```
+
+**Nota:** Solo se pueden cancelar pedidos en estado `pending` o `confirmed`.
+
+---
+
 ## 🏥 Health Check
 
 ### Verificar Estado del API
@@ -664,19 +903,73 @@ GET /health
 - El token expira en 7 días (configurable)
 
 ### Roles de Usuario
-- `user`: Usuario regular
-- `admin`: Administrador (acceso a gestión de usuarios)
-- `superadmin`: Super administrador (julioleon2004@gmail.com, no puede ser eliminado)
+- `user`: Usuario regular (no puede acceder al portal administrativo)
+- `admin`: Administrador (acceso completo al portal y endpoints administrativos)
+- `superadmin`: Super administrador (`julioleon2004@gmail.com`, no puede ser eliminado)
+
+### Control de Acceso
+**Portal Administrativo:**
+- ✅ Permitido: usuarios con rol `admin` o `superadmin`
+- ❌ Bloqueado: usuarios con rol `user` u otros roles
+
+**Endpoints Administrativos:**
+Los siguientes prefijos requieren rol `admin` o `superadmin`:
+- `/api/users` - Gestión de usuarios
+- `/api/admin/carts` - Gestión de carritos
+- `/api/admin/orders` - Gestión de pedidos
+- `/api/products` (POST, PUT, DELETE) - CRUD de productos
+- `/api/youtube` - Búsqueda de videos
+
+**Endpoints Públicos:**
+- `/api/auth/login` - Inicio de sesión
+- `/api/auth/register` - Registro
+- `/api/products` (GET) - Listar productos
+- `/api/categories` (GET) - Listar categorías
+- `/api/health` - Estado del servidor
 
 ### Códigos de Estado HTTP
 - `200` - OK
 - `201` - Created
 - `400` - Bad Request (error de validación)
 - `401` - Unauthorized (sin autenticación o token inválido)
-- `403` - Forbidden (sin permisos)
+- `403` - Forbidden (sin permisos de administrador)
 - `404` - Not Found
 - `409` - Conflict (recurso duplicado)
 - `500` - Internal Server Error
+
+### Formato de Errores
+
+**Errores de Validación (400):**
+```json
+{
+  "errors": [
+    {
+      "type": "field",
+      "value": "r@r.c",
+      "msg": "Debe proporcionar un email válido",
+      "path": "email",
+      "location": "body"
+    }
+  ]
+}
+```
+
+**Errores Generales (401, 403, 404, 500):**
+```json
+{
+  "error": {
+    "message": "Invalid credentials",
+    "status": 401
+  }
+}
+```
+
+**Mensajes de Validación Personalizados:**
+- Email inválido: `"Debe proporcionar un email válido"`
+- Contraseña requerida: `"La contraseña es requerida"`
+- Credenciales incorrectas: `"Invalid credentials"`
+- Cuenta desactivada: `"Account is deactivated"`
+- Sin permisos de admin: `"Access denied. Admin privileges required."`
 
 ### Paginación
 Los endpoints de listado soportan paginación:
@@ -707,3 +1000,32 @@ Los endpoints de listado soportan paginación:
 - Consultar `YOUTUBE_API_KEY_GUIDE.md` para instrucciones de configuración
 - Cuota diaria gratuita: 10,000 unidades
 - Búsqueda: 100 unidades por llamada
+
+---
+
+## 🔑 Credenciales de Prueba
+
+### Usuario Administrador
+```
+Email: test@ejemplo.com
+Password: Test123!
+Rol: admin
+```
+
+### Usuario Super Administrador
+```
+Email: julioleon2004@gmail.com
+Password: Admin123!
+Rol: superadmin
+Nota: Este usuario NO puede ser eliminado
+```
+
+---
+
+## 📚 Documentación Adicional
+
+- **Guía de YouTube API:** `docs/YOUTUBE_API_KEY_GUIDE.md`
+- **Guía de Adminer:** `docs/ADMINER_GUIDE.md`
+- **Estado Actual:** `docs/ESTADO_ACTUAL.md`
+- **Implementación Completa:** `docs/IMPLEMENTACION_COMPLETADA_backend.md`
+
