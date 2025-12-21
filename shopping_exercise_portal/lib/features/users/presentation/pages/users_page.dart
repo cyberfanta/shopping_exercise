@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:data_table_2/data_table_2.dart';
+import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import '../../../../core/models/user.dart';
-import '../../../auth/presentation/cubit/auth_cubit.dart';
-import '../cubit/users_cubit.dart';
+import '../../data/user_service.dart';
 import '../widgets/user_form_dialog.dart';
 
 class UsersPage extends StatefulWidget {
@@ -15,277 +13,267 @@ class UsersPage extends StatefulWidget {
 
 class _UsersPageState extends State<UsersPage> {
   final _searchController = TextEditingController();
+  final PagingController<int, User> _pagingController = PagingController(firstPageKey: 1);
+  final UserService _userService = UserService();
+  
   String? _selectedRole;
+  int _totalItems = 0;
+  int _currentItems = 0;
 
   @override
   void initState() {
     super.initState();
-    context.read<UsersCubit>().loadUsers();
+    _pagingController.addPageRequestListener((pageKey) {
+      _fetchPage(pageKey);
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _pagingController.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchPage(int pageKey) async {
+    try {
+      final result = await _userService.getUsers(
+        page: pageKey,
+        limit: 20,
+        role: _selectedRole,
+        search: _searchController.text.isEmpty ? null : _searchController.text,
+      );
+
+      final users = result['users'] as List<User>;
+      final pagination = result['pagination'] as Map<String, dynamic>;
+      final isLastPage = pageKey >= pagination['totalPages'];
+
+      setState(() {
+        _totalItems = pagination['totalItems'];
+        _currentItems = _pagingController.itemList?.length ?? 0;
+      });
+
+      if (isLastPage) {
+        _pagingController.appendLastPage(users);
+        setState(() {
+          _currentItems = (_pagingController.itemList?.length ?? 0);
+        });
+      } else {
+        final nextPageKey = pageKey + 1;
+        _pagingController.appendPage(users, nextPageKey);
+        setState(() {
+          _currentItems = (_pagingController.itemList?.length ?? 0);
+        });
+      }
+    } catch (error) {
+      _pagingController.error = error;
+    }
+  }
+
+  void _refreshData() {
+    _pagingController.refresh();
   }
 
   void _showUserForm(User user) {
     showDialog(
       context: context,
-      builder: (dialogContext) => BlocProvider.value(
-        value: context.read<UsersCubit>(),
-        child: UserFormDialog(user: user),
+      builder: (dialogContext) => UserFormDialog(
+        user: user,
+        onSave: (userId, role, isActive) async {
+          await _userService.updateUser(userId, {
+            'role': role,
+            'is_active': isActive,
+          });
+          _refreshData();
+        },
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocConsumer<UsersCubit, UsersState>(
-      listener: (context, state) {
-        if (state is UsersError) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.message),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
-        }
-      },
-      builder: (context, state) {
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Gestión de Usuarios'),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () {
-                  context.read<UsersCubit>().loadUsers(
-                        role: _selectedRole,
-                        search: _searchController.text,
-                      );
-                },
-              ),
-              const SizedBox(width: 16),
-            ],
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Gestión de Usuarios'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _refreshData,
           ),
-          body: Column(
-            children: [
-              // Search and filters
-              Container(
-                padding: const EdgeInsets.all(16),
-                color: Colors.white,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        decoration: InputDecoration(
-                          hintText: 'Buscar usuarios...',
-                          prefixIcon: const Icon(Icons.search),
-                          suffixIcon: _searchController.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear),
-                                  onPressed: () {
-                                    setState(() {
-                                      _searchController.clear();
-                                    });
-                                    context.read<UsersCubit>().loadUsers(
-                                          role: _selectedRole,
-                                        );
-                                  },
-                                )
-                              : null,
-                        ),
-                        onSubmitted: (value) {
-                          context.read<UsersCubit>().loadUsers(
-                                role: _selectedRole,
-                                search: value,
-                              );
-                        },
-                      ),
+          const SizedBox(width: 16),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Search and filters
+          Container(
+            padding: const EdgeInsets.all(16),
+            color: Colors.white,
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Buscar usuarios...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                setState(() {
+                                  _searchController.clear();
+                                });
+                                _refreshData();
+                              },
+                            )
+                          : null,
                     ),
-                    const SizedBox(width: 16),
-                    DropdownButton<String?>(
-                      value: _selectedRole,
-                      hint: const Text('Todos los roles'),
-                      items: const [
-                        DropdownMenuItem(value: null, child: Text('Todos')),
-                        DropdownMenuItem(value: 'user', child: Text('Usuario')),
-                        DropdownMenuItem(value: 'admin', child: Text('Admin')),
-                        DropdownMenuItem(value: 'superadmin', child: Text('SuperAdmin')),
-                      ],
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedRole = value;
-                        });
-                        context.read<UsersCubit>().loadUsers(
-                              role: value,
-                              search: _searchController.text,
-                            );
-                      },
-                    ),
+                    onSubmitted: (value) {
+                      _refreshData();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 16),
+                DropdownButton<String?>(
+                  value: _selectedRole,
+                  hint: const Text('Todos los roles'),
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('Todos los roles')),
+                    DropdownMenuItem(value: 'user', child: Text('Usuario')),
+                    DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                    DropdownMenuItem(value: 'superadmin', child: Text('Super Admin')),
                   ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedRole = value;
+                    });
+                    _refreshData();
+                  },
+                ),
+                const SizedBox(width: 16),
+                // Counter
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha:0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '$_currentItems / $_totalItems',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          
+          // Users list with infinite scroll
+          Expanded(
+            child: PagedListView<int, User>(
+              pagingController: _pagingController,
+              padding: const EdgeInsets.all(16),
+              builderDelegate: PagedChildBuilderDelegate<User>(
+                itemBuilder: (context, user, index) => _UserCard(
+                  user: user,
+                  onEdit: () => _showUserForm(user),
+                  onDelete: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (dialogContext) => AlertDialog(
+                        title: const Text('Eliminar usuario'),
+                        content: Text('¿Estás seguro de eliminar a ${user.fullName}?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dialogContext, false),
+                            child: const Text('Cancelar'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(dialogContext, true),
+                            style: TextButton.styleFrom(foregroundColor: Colors.red),
+                            child: const Text('Eliminar'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirm == true && mounted) {
+                      try {
+                        await _userService.deleteUser(user.id);
+                        _refreshData();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Usuario eliminado'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    }
+                  },
+                ),
+                firstPageErrorIndicatorBuilder: (context) => Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline, size: 64, color: Colors.grey.shade400),
+                      const SizedBox(height: 16),
+                      Text('Error al cargar usuarios', style: TextStyle(fontSize: 18, color: Colors.grey.shade600)),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: _refreshData,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Reintentar'),
+                      ),
+                    ],
+                  ),
+                ),
+                noItemsFoundIndicatorBuilder: (context) => Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.people_outline, size: 64, color: Colors.grey.shade400),
+                      const SizedBox(height: 16),
+                      Text('No hay usuarios', style: TextStyle(fontSize: 18, color: Colors.grey.shade600)),
+                    ],
+                  ),
                 ),
               ),
-              const Divider(height: 1),
-              
-              // Users table
-              Expanded(
-                child: state is UsersLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : state is UsersLoaded
-                        ? state.users.isEmpty
-                            ? const Center(child: Text('No hay usuarios'))
-                            : BlocBuilder<AuthCubit, AuthState>(
-                                builder: (context, authState) {
-                                  final currentUser = authState is AuthAuthenticated
-                                      ? authState.user
-                                      : null;
-                                  
-                                  return DataTable2(
-                                    columnSpacing: 12,
-                                    horizontalMargin: 12,
-                                    minWidth: 600,
-                                    columns: const [
-                                      DataColumn2(label: Text('Email'), size: ColumnSize.L),
-                                      DataColumn2(label: Text('Nombre')),
-                                      DataColumn2(label: Text('Rol')),
-                                      DataColumn2(label: Text('Estado')),
-                                      DataColumn2(label: Text('Acciones'), fixedWidth: 120),
-                                    ],
-                                    rows: state.users.map((user) {
-                                      final isSuperAdmin = user.email == 'julioleon2004@gmail.com';
-                                      final canDelete = !isSuperAdmin &&
-                                          currentUser != null &&
-                                          currentUser.isSuperAdmin;
-
-                                      return DataRow2(
-                                        cells: [
-                                          DataCell(
-                                            Row(
-                                              children: [
-                                                CircleAvatar(
-                                                  radius: 16,
-                                                  backgroundColor:
-                                                      Theme.of(context).colorScheme.primary,
-                                                  child: Text(
-                                                    user.email[0].toUpperCase(),
-                                                    style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 12,
-                                                      fontWeight: FontWeight.bold,
-                                                    ),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                  child: Text(
-                                                    user.email,
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          DataCell(Text(user.fullName.isNotEmpty
-                                              ? user.fullName
-                                              : '-')),
-                                          DataCell(
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 12,
-                                                vertical: 4,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: _getRoleColor(context, user.role)
-                                                    .withValues(alpha:0.1),
-                                                borderRadius: BorderRadius.circular(12),
-                                                border: Border.all(
-                                                  color: _getRoleColor(context, user.role),
-                                                  width: 1,
-                                                ),
-                                              ),
-                                              child: Text(
-                                                _getRoleText(user.role),
-                                                style: TextStyle(
-                                                  color: _getRoleColor(context, user.role),
-                                                  fontWeight: FontWeight.w600,
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          DataCell(
-                                            Icon(
-                                              user.isActive
-                                                  ? Icons.check_circle
-                                                  : Icons.cancel,
-                                              color: user.isActive
-                                                  ? Colors.green
-                                                  : Colors.red,
-                                              size: 20,
-                                            ),
-                                          ),
-                                          DataCell(
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                IconButton(
-                                                  icon: const Icon(Icons.edit, size: 18),
-                                                  onPressed: () => _showUserForm(user),
-                                                  tooltip: 'Editar',
-                                                ),
-                                                if (canDelete)
-                                                  IconButton(
-                                                    icon: const Icon(Icons.delete, size: 18),
-                                                    color: Theme.of(context).colorScheme.error,
-                                                    onPressed: () => _confirmDelete(context, user),
-                                                    tooltip: 'Eliminar',
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    }).toList(),
-                                  );
-                                },
-                              )
-                        : const Center(child: Text('Error al cargar usuarios')),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _confirmDelete(BuildContext context, User user) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Eliminar usuario'),
-        content: Text('¿Estás seguro de eliminar a ${user.email}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () {
-              context.read<UsersCubit>().deleteUser(user.id);
-              Navigator.pop(dialogContext);
-            },
-            child: const Text('Eliminar'),
+            ),
           ),
         ],
       ),
     );
   }
+}
 
-  Color _getRoleColor(BuildContext context, String role) {
-    switch (role) {
+class _UserCard extends StatelessWidget {
+  final User user;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _UserCard({
+    required this.user,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  Color _getRoleColor() {
+    switch (user.role) {
       case 'superadmin':
         return Colors.purple;
       case 'admin':
@@ -295,15 +283,95 @@ class _UsersPageState extends State<UsersPage> {
     }
   }
 
-  String _getRoleText(String role) {
-    switch (role) {
-      case 'superadmin':
-        return 'SUPER ADMIN';
-      case 'admin':
-        return 'ADMIN';
-      default:
-        return 'USUARIO';
-    }
+  @override
+  Widget build(BuildContext context) {
+    final roleColor = _getRoleColor();
+    final isSuperAdmin = user.role == 'superadmin';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            // Avatar
+            CircleAvatar(
+              backgroundColor: roleColor.withValues(alpha:0.2),
+              child: Text(
+                user.email[0].toUpperCase(),
+                style: TextStyle(
+                  color: roleColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            
+            // Info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          user.fullName.isNotEmpty ? user.fullName : user.email,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: roleColor.withValues(alpha:0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          user.role.toUpperCase(),
+                          style: TextStyle(
+                            color: roleColor,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    user.email,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  if (user.phone != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      user.phone!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            
+            // Actions
+            if (!isSuperAdmin) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.edit_outlined),
+                onPressed: onEdit,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                onPressed: onDelete,
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
-

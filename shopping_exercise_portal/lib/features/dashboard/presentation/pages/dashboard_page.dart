@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../auth/presentation/cubit/auth_cubit.dart';
 import '../../../products/presentation/pages/products_page.dart';
+import '../../../cart/presentation/pages/cart_page.dart';
+import '../../../orders/presentation/pages/orders_page.dart';
 import '../../../users/presentation/pages/users_page.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -16,6 +18,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
   final List<Widget> _pages = [
     const ProductsPage(),
+    const CartPage(),
+    const OrdersPage(),
     const UsersPage(),
   ];
 
@@ -137,6 +141,16 @@ class _DashboardPageState extends State<DashboardPage> {
                 label: Text('Videos'),
               ),
               NavigationRailDestination(
+                icon: Icon(Icons.shopping_cart_outlined),
+                selectedIcon: Icon(Icons.shopping_cart),
+                label: Text('Carrito'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.shopping_bag_outlined),
+                selectedIcon: Icon(Icons.shopping_bag),
+                label: Text('Pedidos'),
+              ),
+              NavigationRailDestination(
                 icon: Icon(Icons.people_outline),
                 selectedIcon: Icon(Icons.people),
                 label: Text('Usuarios'),
@@ -149,7 +163,10 @@ class _DashboardPageState extends State<DashboardPage> {
           
           // Main content
           Expanded(
-            child: _pages[_selectedIndex],
+            child: IndexedStack(
+              index: _selectedIndex,
+              children: _pages,
+            ),
           ),
         ],
       ),

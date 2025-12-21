@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/models/product.dart';
 import '../../../../core/models/category.dart';
 import '../cubit/products_cubit.dart';
@@ -23,6 +24,8 @@ class _ProductsPageState extends State<ProductsPage> {
   String? _selectedCategoryId;
   List<Category> _categories = [];
   bool _isLoadingCategories = true;
+  int _totalItems = 0;
+  int _currentItems = 0;
 
   @override
   void initState() {
@@ -67,11 +70,22 @@ class _ProductsPageState extends State<ProductsPage> {
       final pagination = result['pagination'] as Map<String, dynamic>;
       final isLastPage = pageKey >= pagination['totalPages'];
 
+      setState(() {
+        _totalItems = pagination['totalItems'];
+        _currentItems = _pagingController.itemList?.length ?? 0;
+      });
+
       if (isLastPage) {
         _pagingController.appendLastPage(products);
+        setState(() {
+          _currentItems = (_pagingController.itemList?.length ?? 0);
+        });
       } else {
         final nextPageKey = pageKey + 1;
         _pagingController.appendPage(products, nextPageKey);
+        setState(() {
+          _currentItems = (_pagingController.itemList?.length ?? 0);
+        });
       }
     } catch (error) {
       _pagingController.error = error;
@@ -182,7 +196,23 @@ class _ProductsPageState extends State<ProductsPage> {
                           _refreshData();
                         },
                       ),
+                      const SizedBox(width: 16),
                     ],
+                    // Counter
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha:0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '$_currentItems / $_totalItems',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -333,6 +363,44 @@ class _VideoCard extends StatelessWidget {
     required this.onDelete,
   });
 
+  Future<void> _openVideo(BuildContext context) async {
+    if (product.youtubeVideoId == null || product.youtubeVideoId!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Este video no tiene un ID de YouTube'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final url = Uri.parse('https://www.youtube.com/watch?v=${product.youtubeVideoId}');
+    
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudo abrir el video'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -340,39 +408,113 @@ class _VideoCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Thumbnail
+          // Thumbnail with play overlay
           Expanded(
             child: Stack(
               children: [
-                Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                // Thumbnail image
+                GestureDetector(
+                  onTap: () => _openVideo(context),
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    ),
+                    child: product.thumbnail.isNotEmpty
+                        ? Image.network(
+                            product.thumbnail,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return const Icon(Icons.video_library, size: 48);
+                            },
+                          )
+                        : const Icon(Icons.video_library, size: 48),
                   ),
-                  child: product.thumbnail.isNotEmpty
-                      ? Image.network(
-                          product.thumbnail,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Icon(Icons.video_library, size: 48);
-                          },
-                        )
-                      : const Icon(Icons.video_library, size: 48),
                 ),
-                // YouTube play button overlay
+                
+                // Dark overlay on hover effect (simulated with opacity)
+                Positioned.fill(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => _openVideo(context),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.0),
+                              Colors.black.withValues(alpha: 0.3),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                
+                // Center play button
+                Positioned.fill(
+                  child: Center(
+                    child: Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => _openVideo(context),
+                          customBorder: const CircleBorder(),
+                          child: const Icon(
+                            Icons.play_arrow,
+                            color: Colors.white,
+                            size: 32,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                
+                // YouTube badge
                 Positioned(
                   top: 8,
                   right: 8,
                   child: Container(
-                    padding: const EdgeInsets.all(4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.red,
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: const Icon(
-                      Icons.play_arrow,
-                      color: Colors.white,
-                      size: 16,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.play_arrow,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 2),
+                        Text(
+                          'YouTube',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -437,26 +579,47 @@ class _VideoCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Row(
+                // Buttons
+                Column(
                   children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: onEdit,
-                        icon: const Icon(Icons.edit, size: 16),
-                        label: const Text('Editar'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    // Ver Video button (prominent)
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _openVideo(context),
+                        icon: const Icon(Icons.play_circle_filled, size: 18),
+                        label: const Text('Ver Video'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: onDelete,
-                      color: Theme.of(context).colorScheme.error,
-                      style: IconButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.error.withValues(alpha:0.1),
-                      ),
+                    const SizedBox(height: 8),
+                    // Edit and Delete buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: onEdit,
+                            icon: const Icon(Icons.edit, size: 16),
+                            label: const Text('Editar'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: onDelete,
+                          color: Theme.of(context).colorScheme.error,
+                          style: IconButton.styleFrom(
+                            backgroundColor: Theme.of(context).colorScheme.error.withValues(alpha:0.1),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
