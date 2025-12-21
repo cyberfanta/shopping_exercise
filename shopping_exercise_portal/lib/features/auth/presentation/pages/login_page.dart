@@ -175,16 +175,16 @@ class _LoginPageState extends State<LoginPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Credenciales de prueba:',
+                                  'Credenciales de prueba (Admin):',
                                   style: Theme.of(context).textTheme.labelLarge,
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Email: julioleon2004@gmail.com',
+                                  'Email: test@ejemplo.com',
                                   style: Theme.of(context).textTheme.bodySmall,
                                 ),
                                 Text(
-                                  'Password: Admin123!',
+                                  'Password: Test123!',
                                   style: Theme.of(context).textTheme.bodySmall,
                                 ),
                               ],

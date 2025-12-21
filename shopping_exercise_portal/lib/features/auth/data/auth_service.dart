@@ -29,7 +29,18 @@ class AuthService {
       return {'user': user, 'token': token};
     } else {
       final error = jsonDecode(response.body);
-      throw Exception(error['error']['message'] ?? 'Login failed');
+      
+      // Manejar errores de validación
+      if (error['errors'] != null && error['errors'] is List) {
+        final errors = error['errors'] as List;
+        if (errors.isNotEmpty) {
+          final firstError = errors[0];
+          throw Exception(firstError['msg'] ?? 'Error de validación');
+        }
+      }
+      
+      // Manejar errores normales
+      throw Exception(error['error']?['message'] ?? 'Error al iniciar sesión');
     }
   }
 

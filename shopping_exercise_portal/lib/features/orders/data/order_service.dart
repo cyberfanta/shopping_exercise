@@ -24,8 +24,6 @@ class OrderService {
     final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.adminOrders}')
         .replace(queryParameters: queryParams);
 
-    print('🌐 OrderService: GET $uri');
-
     final response = await http.get(
       uri,
       headers: {
@@ -34,15 +32,11 @@ class OrderService {
       },
     );
 
-    print('📡 Response status: ${response.statusCode}');
-
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       final orders = (data['orders'] as List)
           .map((json) => Order.fromJson(json))
           .toList();
-      
-      print('✅ Parsed ${orders.length} orders successfully');
       
       return {
         'orders': orders,
@@ -54,7 +48,6 @@ class OrderService {
         },
       };
     } else {
-      print('❌ Failed to load orders: ${response.statusCode}');
       throw Exception('Failed to load orders');
     }
   }

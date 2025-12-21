@@ -4,10 +4,12 @@
 -- 1. Crear usuario de prueba (si no existe)
 -- Password: Test123!
 INSERT INTO users (email, password_hash, first_name, last_name, role, is_active) VALUES
-('test@ejemplo.com', '$2a$10$NkPYpYMuJWcGVKu4JY1og.XvqYQer2D1fqJbWPYhvrBL2Bdhb3QnC', 'Usuario', 'Prueba', 'user', true)
+('test@ejemplo.com', '$2a$10$zOb3.1mSC6Tl8AiMegOY9.KrS0tnSaQUiN8DNz4SsaiW0kvVsIPzq', 'Usuario', 'Prueba', 'admin', true)
 ON CONFLICT (email) DO UPDATE SET
+    password_hash = EXCLUDED.password_hash,
     first_name = EXCLUDED.first_name,
-    last_name = EXCLUDED.last_name;
+    last_name = EXCLUDED.last_name,
+    role = EXCLUDED.role;
 
 -- Obtener el ID del usuario de prueba
 DO $$

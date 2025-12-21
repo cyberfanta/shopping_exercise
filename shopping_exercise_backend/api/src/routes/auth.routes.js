@@ -15,8 +15,13 @@ router.post('/register', [
 
 // Login
 router.post('/login', [
-  body('email').isEmail().normalizeEmail(),
-  body('password').notEmpty()
+  body('email')
+    .isEmail()
+    .withMessage('Debe proporcionar un email válido')
+    .normalizeEmail(),
+  body('password')
+    .notEmpty()
+    .withMessage('La contraseña es requerida')
 ], authController.login);
 
 // Request password reset

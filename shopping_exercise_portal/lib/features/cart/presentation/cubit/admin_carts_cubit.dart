@@ -36,8 +36,7 @@ class AdminCartsCubit extends Cubit<AdminCartsState> {
     bool isLoadMore = false,
   }) async {
     try {
-      print('🛒 AdminCartsCubit: Loading carts (page: $page, isLoadMore: $isLoadMore)');
-      
+
       if (!isLoadMore) {
         emit(AdminCartsLoading());
       }
@@ -46,9 +45,6 @@ class AdminCartsCubit extends Cubit<AdminCartsState> {
         page: page,
         limit: 20,
       );
-
-      print('🛒 AdminCartsCubit: Received ${result['carts'].length} carts');
-      print('🛒 AdminCartsCubit: Pagination: ${result['pagination']}');
 
       if (isLoadMore && state is AdminCartsLoaded) {
         final currentLoadedState = state as AdminCartsLoaded;
@@ -62,10 +58,7 @@ class AdminCartsCubit extends Cubit<AdminCartsState> {
           pagination: result['pagination'],
         ));
       }
-      
-      print('🛒 AdminCartsCubit: State emitted successfully');
     } catch (e) {
-      print('❌ AdminCartsCubit ERROR: $e');
       emit(AdminCartsError(e.toString()));
     }
   }

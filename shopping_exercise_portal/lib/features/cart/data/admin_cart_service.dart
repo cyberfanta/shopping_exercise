@@ -14,9 +14,6 @@ class AdminCartService {
     final token = await _authService.getToken();
     final url = '${ApiConfig.baseUrl}${ApiConfig.adminCarts}?page=$page&limit=$limit';
     
-    print('🌐 AdminCartService: GET $url');
-    print('🔑 Token: ${token?.substring(0, 20)}...');
-    
     final response = await http.get(
       Uri.parse(url),
       headers: {
@@ -25,21 +22,16 @@ class AdminCartService {
       },
     );
 
-    print('📡 Response status: ${response.statusCode}');
-    print('📡 Response body: ${response.body.substring(0, response.body.length > 200 ? 200 : response.body.length)}...');
-
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
       final carts = (data['carts'] as List)
           .map((cart) => AdminCart.fromJson(cart))
           .toList();
-      print('✅ Parsed ${carts.length} carts successfully');
       return {
         'carts': carts,
         'pagination': data['pagination'],
       };
     } else {
-      print('❌ Failed to load carts: ${response.statusCode} - ${response.body}');
       throw Exception('Failed to load carts: ${response.body}');
     }
   }

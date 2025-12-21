@@ -38,7 +38,16 @@ class AuthCubit extends Cubit<AuthState> {
     final auth = await _authService.checkAuth();
     
     if (auth != null) {
-      emit(AuthAuthenticated(user: auth['user'], token: auth['token']));
+      final user = auth['user'] as User;
+      
+      // Verificar que el usuario sea admin o superadmin
+      if (user.role != 'admin' && user.role != 'superadmin') {
+        await _authService.logout();
+        emit(AuthUnauthenticated());
+        return;
+      }
+      
+      emit(AuthAuthenticated(user: user, token: auth['token']));
     } else {
       emit(AuthUnauthenticated());
     }
@@ -48,7 +57,16 @@ class AuthCubit extends Cubit<AuthState> {
     try {
       emit(AuthLoading());
       final result = await _authService.login(email, password);
-      emit(AuthAuthenticated(user: result['user'], token: result['token']));
+      final user = result['user'] as User;
+      
+      // Verificar que el usuario sea admin o superadmin
+      if (user.role != 'admin' && user.role != 'superadmin') {
+        emit(AuthError('Acceso denegado. Se requieren privilegios de administrador.'));
+        emit(AuthUnauthenticated());
+        return;
+      }
+      
+      emit(AuthAuthenticated(user: user, token: result['token']));
     } catch (e) {
       emit(AuthError(e.toString().replaceAll('Exception: ', '')));
       emit(AuthUnauthenticated());
