@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import '../../../../core/models/product.dart';
+import '../../../../core/models/category.dart';
 import '../cubit/products_cubit.dart';
-import '../widgets/product_form_dialog.dart';
 import '../widgets/youtube_search_dialog.dart';
+import '../widgets/edit_video_dialog.dart';
+import '../../data/product_service.dart';
 
 class ProductsPage extends StatefulWidget {
   const ProductsPage({super.key});
@@ -14,28 +17,69 @@ class ProductsPage extends StatefulWidget {
 
 class _ProductsPageState extends State<ProductsPage> {
   final _searchController = TextEditingController();
+  final PagingController<int, Product> _pagingController = PagingController(firstPageKey: 1);
+  final ProductService _productService = ProductService();
+  
   String? _selectedCategoryId;
+  List<Category> _categories = [];
+  bool _isLoadingCategories = true;
 
   @override
   void initState() {
     super.initState();
-    context.read<ProductsCubit>().loadProducts();
+    _loadCategories();
+    _pagingController.addPageRequestListener((pageKey) {
+      _fetchPage(pageKey);
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _pagingController.dispose();
     super.dispose();
   }
 
-  void _showProductForm({Product? product}) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => BlocProvider.value(
-        value: context.read<ProductsCubit>(),
-        child: ProductFormDialog(product: product),
-      ),
-    );
+  Future<void> _loadCategories() async {
+    try {
+      final categories = await _productService.getCategories();
+      setState(() {
+        _categories = categories;
+        _isLoadingCategories = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingCategories = false;
+      });
+    }
+  }
+
+  Future<void> _fetchPage(int pageKey) async {
+    try {
+      final result = await _productService.getProducts(
+        page: pageKey,
+        limit: 20,
+        categoryId: _selectedCategoryId,
+        search: _searchController.text.isEmpty ? null : _searchController.text,
+      );
+
+      final products = result['products'] as List<Product>;
+      final pagination = result['pagination'] as Map<String, dynamic>;
+      final isLastPage = pageKey >= pagination['totalPages'];
+
+      if (isLastPage) {
+        _pagingController.appendLastPage(products);
+      } else {
+        final nextPageKey = pageKey + 1;
+        _pagingController.appendPage(products, nextPageKey);
+      }
+    } catch (error) {
+      _pagingController.error = error;
+    }
+  }
+
+  void _refreshData() {
+    _pagingController.refresh();
   }
 
   void _showYoutubeSearch(BuildContext productContext) {
@@ -45,201 +89,245 @@ class _ProductsPageState extends State<ProductsPage> {
         value: productContext.read<ProductsCubit>(),
         child: const YoutubeSearchDialog(),
       ),
+    ).then((_) {
+      // Refrescar lista después de agregar videos
+      _refreshData();
+    });
+  }
+
+  void _showEditDialog(Product video) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => EditVideoDialog(
+        video: video,
+        onSave: (id, price, stock, isActive) async {
+          await _productService.updateProduct(id, {
+            'price': price,
+            'stock': stock,
+            'is_active': isActive,
+          });
+          _refreshData();
+        },
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return BlocConsumer<ProductsCubit, ProductsState>(
-      listener: (context, state) {
-        if (state is ProductsError) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.message),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
-        }
-      },
-      builder: (context, state) {
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Gestión de Productos'),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: () {
-                  context.read<ProductsCubit>().loadProducts(
-                        categoryId: _selectedCategoryId,
-                        search: _searchController.text,
-                      );
-                },
-              ),
-              const SizedBox(width: 16),
-            ],
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Videos de YouTube'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _refreshData,
           ),
-          body: Column(
-            children: [
-              // Search and filters
-              Container(
-                padding: const EdgeInsets.all(16),
-                color: Colors.white,
-                child: Column(
+          const SizedBox(width: 16),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Search and filters
+          Container(
+            padding: const EdgeInsets.all(16),
+            color: Colors.white,
+            child: Column(
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _searchController,
-                            decoration: InputDecoration(
-                              hintText: 'Buscar productos...',
-                              prefixIcon: const Icon(Icons.search),
-                              suffixIcon: _searchController.text.isNotEmpty
-                                  ? IconButton(
-                                      icon: const Icon(Icons.clear),
-                                      onPressed: () {
-                                        setState(() {
-                                          _searchController.clear();
-                                        });
-                                        context.read<ProductsCubit>().loadProducts(
-                                              categoryId: _selectedCategoryId,
-                                            );
-                                      },
-                                    )
-                                  : null,
-                            ),
-                            onSubmitted: (value) {
-                              context.read<ProductsCubit>().loadProducts(
-                                    categoryId: _selectedCategoryId,
-                                    search: value,
-                                  );
-                            },
-                          ),
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Buscar videos...',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () {
+                                    setState(() {
+                                      _searchController.clear();
+                                    });
+                                    _refreshData();
+                                  },
+                                )
+                              : null,
                         ),
-                        const SizedBox(width: 16),
-                        if (state is ProductsLoaded) ...[
-                          DropdownButton<String?>(
-                            value: _selectedCategoryId,
-                            hint: const Text('Todas las categorías'),
-                            items: [
-                              const DropdownMenuItem(
-                                value: null,
-                                child: Text('Todas las categorías'),
-                              ),
-                              ...state.categories.map((category) {
-                                return DropdownMenuItem(
-                                  value: category.id,
-                                  child: Text(category.name),
-                                );
-                              }),
-                            ],
-                            onChanged: (value) {
-                              setState(() {
-                                _selectedCategoryId = value;
-                              });
-                              context.read<ProductsCubit>().loadProducts(
-                                    categoryId: value,
-                                    search: _searchController.text,
-                                  );
-                            },
-                          ),
-                        ],
-                      ],
+                        onSubmitted: (value) {
+                          _refreshData();
+                        },
+                      ),
                     ),
+                    const SizedBox(width: 16),
+                    if (!_isLoadingCategories) ...[
+                      DropdownButton<String?>(
+                        value: _selectedCategoryId,
+                        hint: const Text('Todos los canales'),
+                        items: [
+                          const DropdownMenuItem(
+                            value: null,
+                            child: Text('Todos los canales'),
+                          ),
+                          ..._categories.map((category) {
+                            return DropdownMenuItem(
+                              value: category.id,
+                              child: Text(category.name),
+                            );
+                          }),
+                        ],
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedCategoryId = value;
+                          });
+                          _refreshData();
+                        },
+                      ),
+                    ],
                   ],
                 ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          
+          // Products list with infinite scroll
+          Expanded(
+            child: PagedGridView<int, Product>(
+              pagingController: _pagingController,
+              padding: const EdgeInsets.all(16),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 300,
+                childAspectRatio: 0.75,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
               ),
-              const Divider(height: 1),
-              
-              // Products list
-              Expanded(
-                child: state is ProductsLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : state is ProductsLoaded
-                        ? state.products.isEmpty
-                            ? const Center(
-                                child: Text('No hay productos'),
-                              )
-                            : GridView.builder(
-                                padding: const EdgeInsets.all(16),
-                                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                                  maxCrossAxisExtent: 300,
-                                  childAspectRatio: 0.75,
-                                  crossAxisSpacing: 16,
-                                  mainAxisSpacing: 16,
-                                ),
-                                itemCount: state.products.length,
-                                itemBuilder: (context, index) {
-                                  final product = state.products[index];
-                                  return _ProductCard(
-                                    product: product,
-                                    onEdit: () => _showProductForm(product: product),
-                                    onDelete: () {
-                                      showDialog(
-                                        context: context,
-                                        builder: (dialogContext) => AlertDialog(
-                                          title: const Text('Eliminar producto'),
-                                          content: Text(
-                                            '¿Estás seguro de eliminar "${product.name}"?',
-                                          ),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.pop(dialogContext),
-                                              child: const Text('Cancelar'),
-                                            ),
-                                            TextButton(
-                                              onPressed: () {
-                                                context
-                                                    .read<ProductsCubit>()
-                                                    .deleteProduct(product.id);
-                                                Navigator.pop(dialogContext);
-                                              },
-                                              child: const Text('Eliminar'),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                  );
-                                },
-                              )
-                        : const Center(
-                            child: Text('Error al cargar productos'),
+              builderDelegate: PagedChildBuilderDelegate<Product>(
+                itemBuilder: (context, product, index) => _VideoCard(
+                  product: product,
+                  onEdit: () => _showEditDialog(product),
+                  onDelete: () {
+                    showDialog(
+                      context: context,
+                      builder: (dialogContext) => AlertDialog(
+                        title: const Text('Eliminar video'),
+                        content: Text(
+                          '¿Estás seguro de eliminar "${product.name}"?',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            child: const Text('Cancelar'),
                           ),
+                          TextButton(
+                            onPressed: () async {
+                              Navigator.pop(dialogContext);
+                              try {
+                                await _productService.deleteProduct(product.id);
+                                _refreshData();
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Video eliminado'),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Error: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            style: TextButton.styleFrom(
+                              foregroundColor: Theme.of(context).colorScheme.error,
+                            ),
+                            child: const Text('Eliminar'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                firstPageErrorIndicatorBuilder: (context) => Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 64,
+                        color: Colors.grey.shade400,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Error al cargar videos',
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: _refreshData,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Reintentar'),
+                      ),
+                    ],
+                  ),
+                ),
+                noItemsFoundIndicatorBuilder: (context) => Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.video_library_outlined,
+                        size: 64,
+                        color: Colors.grey.shade400,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No hay videos',
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Busca videos en YouTube para comenzar',
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ],
+            ),
           ),
-          floatingActionButton: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              FloatingActionButton.extended(
-                heroTag: 'youtube',
-                onPressed: () => _showYoutubeSearch(context),
-                icon: const Icon(Icons.video_library),
-                label: const Text('YouTube'),
-                backgroundColor: Colors.red,
-              ),
-              const SizedBox(height: 8),
-              FloatingActionButton.extended(
-                heroTag: 'add',
-                onPressed: () => _showProductForm(),
-                icon: const Icon(Icons.add),
-                label: const Text('Nuevo Producto'),
-              ),
-            ],
-          ),
-        );
-      },
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'youtube',
+        onPressed: () => _showYoutubeSearch(context),
+        icon: const Icon(Icons.video_library),
+        label: const Text('Buscar en YouTube'),
+        backgroundColor: Colors.red,
+      ),
     );
   }
 }
 
-class _ProductCard extends StatelessWidget {
+class _VideoCard extends StatelessWidget {
   final Product product;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _ProductCard({
+  const _VideoCard({
     required this.product,
     required this.onEdit,
     required this.onDelete,
@@ -252,7 +340,7 @@ class _ProductCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Image
+          // Thumbnail
           Expanded(
             child: Stack(
               children: [
@@ -266,28 +354,28 @@ class _ProductCard extends StatelessWidget {
                           product.thumbnail,
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) {
-                            return const Icon(Icons.image_not_supported, size: 48);
+                            return const Icon(Icons.video_library, size: 48);
                           },
                         )
-                      : const Icon(Icons.image, size: 48),
+                      : const Icon(Icons.video_library, size: 48),
                 ),
-                if (product.youtubeVideoId != null)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Icon(
-                        Icons.play_arrow,
-                        color: Colors.white,
-                        size: 16,
-                      ),
+                // YouTube play button overlay
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Icon(
+                      Icons.play_arrow,
+                      color: Colors.white,
+                      size: 16,
                     ),
                   ),
+                ),
               ],
             ),
           ),
@@ -304,7 +392,28 @@ class _ProductCard extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 4),
+                if (product.categoryName != null) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.person_outline,
+                        size: 14,
+                        color: Theme.of(context).textTheme.bodySmall?.color,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          product.categoryName!,
+                          style: Theme.of(context).textTheme.bodySmall,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 8),
                 Text(
                   '\$${product.finalPrice.toStringAsFixed(2)}',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -312,17 +421,17 @@ class _ProductCard extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 Row(
                   children: [
                     Icon(
-                      Icons.inventory_2,
-                      size: 16,
+                      Icons.inventory_2_outlined,
+                      size: 14,
                       color: Theme.of(context).textTheme.bodySmall?.color,
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      '${product.stock} unidades',
+                      'Stock: ${product.stock}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],

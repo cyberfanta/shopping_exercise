@@ -93,18 +93,125 @@ const productController = {
         return res.status(400).json({ errors: errors.array() });
       }
 
-      const { category_id, name, description, price, discount_price, stock, image_url, images } = req.body;
+      const { 
+        name, 
+        description, 
+        price, 
+        discount_price, 
+        stock, 
+        youtube_video_id, 
+        youtube_thumbnail, 
+        youtube_duration,
+        youtube_channel_id,
+        youtube_channel_name,
+        image_url, 
+        images 
+      } = req.body;
+
+      let category_id = null;
+
+      // If it's a YouTube video, create/get category by channel
+      if (youtube_channel_id && youtube_channel_name) {
+        category_id = await getOrCreateCategoryByChannel(youtube_channel_id, youtube_channel_name);
+      }
 
       const result = await pool.query(
-        `INSERT INTO products (category_id, name, description, price, discount_price, stock, image_url, images) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+        `INSERT INTO products (
+          category_id, name, description, price, discount_price, stock, 
+          youtube_video_id, youtube_thumbnail, youtube_duration,
+          image_url, images
+        ) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
          RETURNING *`,
-        [category_id || null, name, description || null, price, discount_price || null, stock || 0, image_url || null, JSON.stringify(images || [])]
+        [
+          category_id, 
+          name, 
+          description || null, 
+          price, 
+          discount_price || null, 
+          stock || 999, // YouTube videos have unlimited stock by default
+          youtube_video_id || null,
+          youtube_thumbnail || null,
+          youtube_duration || null,
+          image_url || null, 
+          JSON.stringify(images || [])
+        ]
       );
 
       res.status(201).json({ message: 'Product created successfully', product: result.rows[0] });
     } catch (error) {
       console.error('Create product error:', error);
+      res.status(500).json({ error: { message: 'Internal server error', status: 500 } });
+    }
+  },
+
+  // Create multiple products from YouTube videos
+  async createMultipleProducts(req, res) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
+
+      const { products } = req.body; // Array of products
+
+      if (!Array.isArray(products) || products.length === 0) {
+        return res.status(400).json({ error: { message: 'products must be a non-empty array', status: 400 } });
+      }
+
+      const createdProducts = [];
+      const errors_list = [];
+
+      for (const product of products) {
+        try {
+          let category_id = null;
+
+          // Create/get category by channel
+          if (product.youtube_channel_id && product.youtube_channel_name) {
+            category_id = await getOrCreateCategoryByChannel(
+              product.youtube_channel_id, 
+              product.youtube_channel_name
+            );
+          }
+
+          const result = await pool.query(
+            `INSERT INTO products (
+              category_id, name, description, price, discount_price, stock,
+              youtube_video_id, youtube_thumbnail, youtube_duration,
+              image_url
+            ) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
+            RETURNING *`,
+            [
+              category_id,
+              product.name,
+              product.description || null,
+              product.price,
+              product.discount_price || null,
+              product.stock || 999,
+              product.youtube_video_id || null,
+              product.youtube_thumbnail || null,
+              product.youtube_duration || null,
+              product.image_url || null,
+            ]
+          );
+
+          createdProducts.push(result.rows[0]);
+        } catch (error) {
+          errors_list.push({ 
+            product: product.name, 
+            error: error.message 
+          });
+        }
+      }
+
+      res.status(201).json({
+        message: `${createdProducts.length} products created successfully`,
+        products: createdProducts,
+        errors: errors_list.length > 0 ? errors_list : undefined
+      });
+    } catch (error) {
+      console.error('Create multiple products error:', error);
       res.status(500).json({ error: { message: 'Internal server error', status: 500 } });
     }
   },
@@ -202,6 +309,37 @@ const productController = {
     }
   }
 };
+
+// Helper function to get or create category by YouTube channel
+async function getOrCreateCategoryByChannel(channelId, channelName) {
+  try {
+    // Try to find existing category by channel name
+    const existing = await pool.query(
+      'SELECT id FROM categories WHERE name = $1',
+      [channelName]
+    );
+
+    if (existing.rows.length > 0) {
+      return existing.rows[0].id;
+    }
+
+    // Create new category for this channel
+    const newCategory = await pool.query(
+      `INSERT INTO categories (name, description, is_active) 
+       VALUES ($1, $2, true) 
+       RETURNING id`,
+      [
+        channelName,
+        `Videos del canal: ${channelName}`
+      ]
+    );
+
+    return newCategory.rows[0].id;
+  } catch (error) {
+    console.error('Error creating/getting category:', error);
+    return null;
+  }
+}
 
 module.exports = productController;
 

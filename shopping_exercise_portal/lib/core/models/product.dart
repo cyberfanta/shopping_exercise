@@ -8,6 +8,7 @@ class Product {
   final double? discountPrice;
   final int stock;
   final String? youtubeVideoId;
+  final String? youtubeChannelId;
   final String? youtubeThumbnail;
   final String? youtubeDuration;
   final String? imageUrl;
@@ -24,6 +25,7 @@ class Product {
     this.discountPrice,
     required this.stock,
     this.youtubeVideoId,
+    this.youtubeChannelId,
     this.youtubeThumbnail,
     this.youtubeDuration,
     this.imageUrl,
@@ -44,6 +46,7 @@ class Product {
           : null,
       stock: _parseInt(json['stock']) ?? 0,
       youtubeVideoId: json['youtube_video_id'] as String?,
+      youtubeChannelId: json['youtube_channel_id'] as String?,
       youtubeThumbnail: json['youtube_thumbnail'] as String?,
       youtubeDuration: json['youtube_duration'] as String?,
       imageUrl: json['image_url'] as String?,
@@ -80,6 +83,7 @@ class Product {
       'discount_price': discountPrice,
       'stock': stock,
       'youtube_video_id': youtubeVideoId,
+      'youtube_channel_id': youtubeChannelId,
       'youtube_thumbnail': youtubeThumbnail,
       'youtube_duration': youtubeDuration,
       'image_url': imageUrl,

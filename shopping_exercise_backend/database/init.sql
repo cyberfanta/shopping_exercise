@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS products (
     discount_price DECIMAL(10, 2),
     stock INTEGER DEFAULT 0,
     youtube_video_id VARCHAR(100),
+    youtube_channel_id VARCHAR(100),
     youtube_thumbnail VARCHAR(500),
     youtube_duration VARCHAR(20),
     image_url VARCHAR(500),
@@ -121,13 +122,7 @@ CREATE INDEX idx_orders_user ON orders(user_id);
 CREATE INDEX idx_orders_status ON orders(status);
 CREATE INDEX idx_order_items_order ON order_items(order_id);
 
--- Insert sample categories
-INSERT INTO categories (name, description, is_active) VALUES
-('Electrónica', 'Dispositivos electrónicos y gadgets', true),
-('Ropa', 'Ropa y accesorios de moda', true),
-('Hogar', 'Artículos para el hogar', true),
-('Deportes', 'Equipamiento deportivo', true),
-('Libros', 'Libros y revistas', true);
+-- Las categorías se crearán automáticamente basadas en los canales de YouTube
 
 -- Create super admin user (julioleon2004@gmail.com)
 -- Password: Admin123!
@@ -135,13 +130,7 @@ INSERT INTO users (email, password_hash, first_name, last_name, role, is_active)
 ('julioleon2004@gmail.com', '$2a$10$NkPYpYMuJWcGVKu4JY1og.XvqYQer2D1fqJbWPYhvrBL2Bdhb3QnC', 'Julio', 'León', 'superadmin', true)
 ON CONFLICT (email) DO NOTHING;
 
--- Insert sample products with YouTube videos
-INSERT INTO products (category_id, name, description, price, stock, youtube_video_id, youtube_thumbnail, is_active) VALUES
-((SELECT id FROM categories WHERE name = 'Electrónica'), 'Flutter Tutorial Completo', 'Aprende Flutter desde cero', 29.99, 999, 'CD1Y2DJL81M', 'https://i.ytimg.com/vi/CD1Y2DJL81M/mqdefault.jpg', true),
-((SELECT id FROM categories WHERE name = 'Electrónica'), 'Node.js Crash Course', 'Curso intensivo de Node.js', 39.99, 999, 'fBNz5xF-Kx4', 'https://i.ytimg.com/vi/fBNz5xF-Kx4/mqdefault.jpg', true),
-((SELECT id FROM categories WHERE name = 'Deportes'), 'Yoga para Principiantes', 'Clase de yoga completa', 19.99, 999, 'v7AYKMP6rOE', 'https://i.ytimg.com/vi/v7AYKMP6rOE/mqdefault.jpg', true),
-((SELECT id FROM categories WHERE name = 'Hogar'), 'Recetas Fáciles y Rápidas', 'Cocina deliciosa en minutos', 24.99, 999, 'kP3wnYe6Mz0', 'https://i.ytimg.com/vi/kP3wnYe6Mz0/mqdefault.jpg', true),
-((SELECT id FROM categories WHERE name = 'Libros'), 'Audiolibro de Motivación', 'Desarrolla tu mentalidad ganadora', 34.99, 999, '5MgBikgcWnY', 'https://i.ytimg.com/vi/5MgBikgcWnY/mqdefault.jpg', true);
+-- Los productos se agregarán desde el portal usando videos de YouTube
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

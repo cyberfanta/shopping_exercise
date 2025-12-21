@@ -128,11 +128,25 @@ class ProductService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> searchYoutubeVideos(String query) async {
+  Future<List<Map<String, dynamic>>> searchYoutubeVideos(
+    String query, {
+    String order = 'relevance',
+    String videoDuration = 'any',
+  }) async {
     final token = await _authService.getToken();
 
+    final queryParams = {
+      'q': query,
+      'maxResults': '20',
+      if (order.isNotEmpty) 'order': order,
+      if (videoDuration != 'any') 'videoDuration': videoDuration,
+    };
+
+    final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.youtubeSearch}')
+        .replace(queryParameters: queryParams);
+
     final response = await http.get(
-      Uri.parse('${ApiConfig.baseUrl}${ApiConfig.youtubeSearch}?q=$query&maxResults=10'),
+      uri,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -144,6 +158,24 @@ class ProductService {
       return List<Map<String, dynamic>>.from(data['videos']);
     } else {
       throw Exception('Failed to search videos');
+    }
+  }
+
+  Future<void> createMultipleProducts(List<Map<String, dynamic>> products) async {
+    final token = await _authService.getToken();
+
+    final response = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}${ApiConfig.products}/bulk'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'products': products}),
+    );
+
+    if (response.statusCode != 201) {
+      final error = jsonDecode(response.body);
+      throw Exception(error['error']['message'] ?? 'Failed to create products');
     }
   }
 }

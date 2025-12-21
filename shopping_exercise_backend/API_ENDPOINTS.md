@@ -30,6 +30,7 @@ Content-Type: application/json
     "first_name": "Juan",
     "last_name": "Pérez",
     "phone": "+34612345678",
+    "role": "user",
     "created_at": "2025-12-20T10:00:00.000Z"
   },
   "token": "jwt_token_here"
@@ -59,6 +60,7 @@ Content-Type: application/json
     "first_name": "Juan",
     "last_name": "Pérez",
     "phone": "+34612345678",
+    "role": "user",
     "is_active": true
   },
   "token": "jwt_token_here"
@@ -67,91 +69,80 @@ Content-Type: application/json
 
 ---
 
-### Solicitar Restablecimiento de Contraseña
-```http
-POST /auth/forgot-password
-Content-Type: application/json
+## 🎥 YouTube Search
 
-{
-  "email": "usuario@ejemplo.com"
-}
+### Buscar Videos de YouTube (Protegido)
+```http
+GET /youtube/search?q=flutter&order=viewCount&videoDuration=medium
+Authorization: Bearer {token}
 ```
+
+**Parámetros de Query:**
+- `q` (requerido): Término de búsqueda
+- `maxResults` (opcional): Número de resultados (1-50, por defecto: 10)
+- `order` (opcional): Criterio de ordenamiento
+  - `relevance` (por defecto): Relevancia
+  - `date`: Fecha de publicación
+  - `viewCount`: Número de vistas
+  - `rating`: Calificación
+  - `title`: Título alfabético
+- `videoDuration` (opcional): Filtro por duración
+  - `any` (por defecto): Cualquier duración
+  - `short`: Corto (< 4 minutos)
+  - `medium`: Medio (4-20 minutos)
+  - `long`: Largo (> 20 minutos)
+- `publishedAfter` (opcional): Fecha en formato ISO 8601 (ej: 2023-01-01T00:00:00Z)
 
 **Respuesta:**
 ```json
 {
-  "message": "If the email exists, a reset link has been sent"
+  "videos": [
+    {
+      "videoId": "CD1Y2DJL81M",
+      "title": "Flutter Tutorial Completo",
+      "description": "Aprende Flutter desde cero...",
+      "thumbnail": "https://i.ytimg.com/vi/CD1Y2DJL81M/hqdefault.jpg",
+      "channelId": "UCmXVXfidLZQkppLPaATcHag",
+      "channelTitle": "Flutter",
+      "publishedAt": "2023-01-15T10:30:00Z",
+      "viewCount": 150000,
+      "likeCount": 5000,
+      "duration": "PT15M30S",
+      "suggestedPrice": 7.25
+    }
+  ]
 }
 ```
+
+**Cálculo de Precio:**
+- Precio base: $5.00
+- Fórmula: `$5 + (vistas / 100,000) * $1.50`
+- Rango: $5.00 - $99.99
 
 ---
 
-### Restablecer Contraseña
+### Obtener Detalles de Video (Protegido)
 ```http
-POST /auth/reset-password
-Content-Type: application/json
-
-{
-  "token": "reset_token_from_email",
-  "password": "new_password123"
-}
-```
-
-**Respuesta:**
-```json
-{
-  "message": "Password reset successfully"
-}
-```
-
----
-
-### Obtener Usuario Actual (Protegido)
-```http
-GET /auth/me
+GET /youtube/video/{videoId}
 Authorization: Bearer {token}
 ```
 
 **Respuesta:**
 ```json
 {
-  "user": {
-    "id": "uuid",
-    "email": "usuario@ejemplo.com",
-    "first_name": "Juan",
-    "last_name": "Pérez",
-    "phone": "+34612345678",
-    "created_at": "2025-12-20T10:00:00.000Z"
+  "video": {
+    "videoId": "CD1Y2DJL81M",
+    "title": "Flutter Tutorial",
+    "description": "Full description...",
+    "thumbnail": "https://i.ytimg.com/vi/CD1Y2DJL81M/hqdefault.jpg",
+    "channelId": "UCmXVXfidLZQkppLPaATcHag",
+    "channelTitle": "Flutter",
+    "publishedAt": "2023-01-15T10:30:00Z",
+    "duration": "PT15M30S",
+    "viewCount": 150000,
+    "likeCount": 5000,
+    "suggestedPrice": 7.25
   }
-}
-```
-
----
-
-### Actualizar Perfil (Protegido)
-```http
-PUT /auth/profile
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "first_name": "Juan Carlos",
-  "last_name": "Pérez García",
-  "phone": "+34612345679"
-}
-```
-
----
-
-### Cambiar Contraseña (Protegido)
-```http
-POST /auth/change-password
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "current_password": "old_password123",
-  "new_password": "new_password456"
 }
 ```
 
@@ -159,16 +150,16 @@ Content-Type: application/json
 
 ## 📦 Productos
 
-### Obtener Todos los Productos
+### Listar Productos
 ```http
-GET /products?page=1&limit=10&category_id={uuid}&search=laptop
+GET /products?page=1&limit=10&category_id=uuid&search=laptop
 ```
 
-**Parámetros de consulta:**
-- `page` (opcional): Número de página (default: 1)
-- `limit` (opcional): Elementos por página (default: 10, max: 100)
+**Parámetros de Query:**
+- `page` (opcional): Número de página (por defecto: 1)
+- `limit` (opcional): Productos por página (por defecto: 10)
 - `category_id` (opcional): Filtrar por categoría
-- `search` (opcional): Buscar por nombre o descripción
+- `search` (opcional): Buscar en nombre y descripción
 
 **Respuesta:**
 ```json
@@ -177,14 +168,16 @@ GET /products?page=1&limit=10&category_id={uuid}&search=laptop
     {
       "id": "uuid",
       "category_id": "uuid",
-      "category_name": "Electrónica",
-      "name": "Laptop Pro 15\"",
-      "description": "Laptop de alto rendimiento",
-      "price": "1299.99",
+      "category_name": "Flutter",
+      "name": "Flutter Tutorial Completo",
+      "description": "Aprende Flutter...",
+      "price": "7.25",
       "discount_price": null,
-      "stock": 10,
-      "image_url": null,
-      "images": [],
+      "stock": 999,
+      "youtube_video_id": "CD1Y2DJL81M",
+      "youtube_channel_id": "UCmXVXfidLZQkppLPaATcHag",
+      "youtube_thumbnail": "https://i.ytimg.com/vi/CD1Y2DJL81M/hqdefault.jpg",
+      "youtube_duration": "PT15M30S",
       "is_active": true,
       "created_at": "2025-12-20T10:00:00.000Z"
     }
@@ -192,8 +185,8 @@ GET /products?page=1&limit=10&category_id={uuid}&search=laptop
   "pagination": {
     "page": 1,
     "limit": 10,
-    "totalItems": 50,
-    "totalPages": 5
+    "totalItems": 25,
+    "totalPages": 3
   }
 }
 ```
@@ -210,14 +203,13 @@ GET /products/{id}
 {
   "product": {
     "id": "uuid",
-    "category_id": "uuid",
-    "category_name": "Electrónica",
-    "name": "Laptop Pro 15\"",
-    "description": "Laptop de alto rendimiento",
-    "price": "1299.99",
-    "stock": 10,
-    "image_url": null,
-    "is_active": true
+    "name": "Flutter Tutorial",
+    "description": "...",
+    "price": "7.25",
+    "stock": 999,
+    "youtube_video_id": "CD1Y2DJL81M",
+    "youtube_thumbnail": "...",
+    ...
   }
 }
 ```
@@ -231,12 +223,72 @@ Authorization: Bearer {token}
 Content-Type: application/json
 
 {
-  "name": "Nuevo Producto",
-  "description": "Descripción del producto",
-  "price": 99.99,
-  "stock": 50,
-  "category_id": "uuid",
-  "image_url": "https://example.com/image.jpg"
+  "name": "Flutter Tutorial Completo",
+  "description": "Aprende Flutter desde cero",
+  "price": 7.25,
+  "stock": 999,
+  "youtube_video_id": "CD1Y2DJL81M",
+  "youtube_channel_id": "UCmXVXfidLZQkppLPaATcHag",
+  "youtube_channel_name": "Flutter",
+  "youtube_thumbnail": "https://i.ytimg.com/vi/CD1Y2DJL81M/hqdefault.jpg",
+  "youtube_duration": "PT15M30S"
+}
+```
+
+**Notas:**
+- Si se proporcionan `youtube_channel_id` y `youtube_channel_name`, se creará/obtendrá automáticamente una categoría para ese canal.
+- Las categorías se crean automáticamente basadas en los canales de YouTube.
+
+**Respuesta:**
+```json
+{
+  "message": "Product created successfully",
+  "product": { ... }
+}
+```
+
+---
+
+### Crear Múltiples Productos (Protegido)
+```http
+POST /products/bulk
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "products": [
+    {
+      "name": "Video Tutorial 1",
+      "description": "Descripción del video 1",
+      "price": 29.99,
+      "stock": 999,
+      "youtube_video_id": "video_id_1",
+      "youtube_channel_id": "channel_id_1",
+      "youtube_channel_name": "Canal 1",
+      "youtube_thumbnail": "thumbnail_url_1",
+      "youtube_duration": "PT15M30S"
+    },
+    {
+      "name": "Video Tutorial 2",
+      "description": "Descripción del video 2",
+      "price": 39.99,
+      "stock": 999,
+      "youtube_video_id": "video_id_2",
+      "youtube_channel_id": "channel_id_2",
+      "youtube_channel_name": "Canal 2",
+      "youtube_thumbnail": "thumbnail_url_2",
+      "youtube_duration": "PT20M15S"
+    }
+  ]
+}
+```
+
+**Respuesta:**
+```json
+{
+  "message": "2 products created successfully",
+  "products": [ ... ],
+  "errors": []
 }
 ```
 
@@ -249,27 +301,43 @@ Authorization: Bearer {token}
 Content-Type: application/json
 
 {
-  "name": "Nombre Actualizado",
-  "price": 89.99,
-  "stock": 45
+  "name": "Nuevo nombre",
+  "price": 35.99,
+  "stock": 50,
+  "is_active": true
+}
+```
+
+**Respuesta:**
+```json
+{
+  "message": "Product updated successfully",
+  "product": { ... }
 }
 ```
 
 ---
 
-### Eliminar Producto (Protegido)
+### Eliminar Producto (Protegido - Soft Delete)
 ```http
 DELETE /products/{id}
 Authorization: Bearer {token}
 ```
 
+**Respuesta:**
+```json
+{
+  "message": "Product deleted successfully"
+}
+```
+
 ---
 
-## 🗂️ Categorías
+## 📂 Categorías
 
-### Obtener Todas las Categorías
+### Listar Categorías
 ```http
-GET /categories
+GET /categories?page=1&limit=10
 ```
 
 **Respuesta:**
@@ -278,63 +346,28 @@ GET /categories
   "categories": [
     {
       "id": "uuid",
-      "name": "Electrónica",
-      "description": "Dispositivos electrónicos",
-      "image_url": null,
-      "is_active": true
+      "name": "Flutter",
+      "description": "Videos del canal: Flutter",
+      "is_active": true,
+      "created_at": "2025-12-20T10:00:00.000Z"
     }
-  ]
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "totalItems": 5,
+    "totalPages": 1
+  }
 }
 ```
 
----
-
-### Obtener Categoría por ID
-```http
-GET /categories/{id}
-```
-
----
-
-### Crear Categoría (Protegido)
-```http
-POST /categories
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "name": "Nueva Categoría",
-  "description": "Descripción de la categoría"
-}
-```
-
----
-
-### Actualizar Categoría (Protegido)
-```http
-PUT /categories/{id}
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-  "name": "Categoría Actualizada",
-  "description": "Nueva descripción"
-}
-```
-
----
-
-### Eliminar Categoría (Protegido)
-```http
-DELETE /categories/{id}
-Authorization: Bearer {token}
-```
+**Nota:** Las categorías se crean automáticamente al agregar productos de YouTube basándose en los nombres de canales.
 
 ---
 
 ## 🛒 Carrito de Compras
 
-### Obtener Carrito (Protegido)
+### Ver Carrito (Protegido)
 ```http
 GET /cart
 Authorization: Bearer {token}
@@ -348,26 +381,24 @@ Authorization: Bearer {token}
     "items": [
       {
         "id": "uuid",
-        "quantity": 2,
-        "price": "1299.99",
-        "subtotal": "2599.98",
         "product_id": "uuid",
-        "product_name": "Laptop Pro 15\"",
-        "product_description": "Laptop de alto rendimiento",
-        "image_url": null,
-        "stock": 10
+        "product_name": "Flutter Tutorial",
+        "price": "7.25",
+        "quantity": 2,
+        "subtotal": "14.50",
+        "youtube_thumbnail": "..."
       }
     ],
-    "total": "2599.98"
+    "subtotal": "14.50"
   }
 }
 ```
 
 ---
 
-### Añadir Producto al Carrito (Protegido)
+### Agregar Producto al Carrito (Protegido)
 ```http
-POST /cart/items
+POST /cart
 Authorization: Bearer {token}
 Content-Type: application/json
 
@@ -380,15 +411,16 @@ Content-Type: application/json
 **Respuesta:**
 ```json
 {
-  "message": "Item added to cart successfully"
+  "message": "Product added to cart successfully",
+  "cartItem": { ... }
 }
 ```
 
 ---
 
-### Actualizar Cantidad de Item (Protegido)
+### Actualizar Cantidad en Carrito (Protegido)
 ```http
-PUT /cart/items/{item_id}
+PUT /cart/{id}
 Authorization: Bearer {token}
 Content-Type: application/json
 
@@ -397,12 +429,27 @@ Content-Type: application/json
 }
 ```
 
+**Respuesta:**
+```json
+{
+  "message": "Cart item updated successfully",
+  "cartItem": { ... }
+}
+```
+
 ---
 
-### Eliminar Item del Carrito (Protegido)
+### Eliminar del Carrito (Protegido)
 ```http
-DELETE /cart/items/{item_id}
+DELETE /cart/{id}
 Authorization: Bearer {token}
+```
+
+**Respuesta:**
+```json
+{
+  "message": "Cart item removed successfully"
+}
 ```
 
 ---
@@ -413,15 +460,27 @@ DELETE /cart
 Authorization: Bearer {token}
 ```
 
+**Respuesta:**
+```json
+{
+  "message": "Cart cleared successfully"
+}
+```
+
 ---
 
-## 📋 Órdenes / Pedidos
+## 📋 Pedidos
 
-### Obtener Pedidos del Usuario (Protegido)
+### Listar Pedidos (Protegido)
 ```http
-GET /orders
+GET /orders?page=1&limit=10&status=confirmed
 Authorization: Bearer {token}
 ```
+
+**Parámetros de Query:**
+- `page` (opcional): Número de página
+- `limit` (opcional): Pedidos por página
+- `status` (opcional): Filtrar por estado
 
 **Respuesta:**
 ```json
@@ -430,61 +489,18 @@ Authorization: Bearer {token}
     {
       "id": "uuid",
       "order_number": "ORD-1234567890-ABC123",
-      "status": "pending",
+      "status": "confirmed",
       "subtotal": "2599.98",
       "tax": "415.99",
       "shipping": "50.00",
       "total": "3065.97",
-      "payment_status": "pending",
+      "payment_status": "paid",
       "payment_method": "credit_card",
-      "shipping_address": {
-        "street": "Calle Principal 123",
-        "city": "Madrid",
-        "state": "Madrid",
-        "zip": "28001",
-        "country": "España"
-      },
       "items_count": 2,
       "created_at": "2025-12-20T10:00:00.000Z"
     }
-  ]
-}
-```
-
----
-
-### Obtener Pedido por ID (Protegido)
-```http
-GET /orders/{id}
-Authorization: Bearer {token}
-```
-
-**Respuesta:**
-```json
-{
-  "order": {
-    "id": "uuid",
-    "order_number": "ORD-1234567890-ABC123",
-    "status": "pending",
-    "subtotal": "2599.98",
-    "tax": "415.99",
-    "shipping": "50.00",
-    "total": "3065.97",
-    "payment_status": "pending",
-    "payment_method": "credit_card",
-    "shipping_address": {...},
-    "items": [
-      {
-        "id": "uuid",
-        "product_id": "uuid",
-        "product_name": "Laptop Pro 15\"",
-        "quantity": 2,
-        "unit_price": "1299.99",
-        "subtotal": "2599.98"
-      }
-    ],
-    "created_at": "2025-12-20T10:00:00.000Z"
-  }
+  ],
+  "pagination": { ... }
 }
 ```
 
@@ -532,7 +548,7 @@ Content-Type: application/json
 
 ---
 
-### Simular Pago (Protegido) - Solo desarrollo
+### Simular Pago (Protegido)
 ```http
 POST /orders/{id}/pay
 Authorization: Bearer {token}
@@ -547,34 +563,76 @@ Authorization: Bearer {token}
 }
 ```
 
-**Respuesta (Fallo):**
-```json
-{
-  "error": {
-    "message": "Payment failed. Please try again.",
-    "status": 400
-  }
-}
-```
-
 ---
 
-### Cancelar Pedido (Protegido)
+## 👥 Gestión de Usuarios (Admin)
+
+### Listar Usuarios (Admin)
 ```http
-POST /orders/{id}/cancel
+GET /users?page=1&limit=10&search=juan
 Authorization: Bearer {token}
 ```
 
 **Respuesta:**
 ```json
 {
-  "message": "Order cancelled successfully"
+  "users": [
+    {
+      "id": "uuid",
+      "email": "usuario@ejemplo.com",
+      "first_name": "Juan",
+      "last_name": "Pérez",
+      "phone": "+34612345678",
+      "role": "user",
+      "is_active": true,
+      "created_at": "2025-12-20T10:00:00.000Z"
+    }
+  ],
+  "pagination": { ... }
 }
 ```
 
-**Notas:**
-- El stock de productos se restaurará automáticamente
-- No se pueden cancelar pedidos ya enviados o entregados
+---
+
+### Actualizar Usuario (Admin)
+```http
+PUT /users/{id}
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "first_name": "Juan Carlos",
+  "role": "admin",
+  "is_active": true
+}
+```
+
+**Nota:** El usuario superadmin (`julioleon2004@gmail.com`) no puede ser modificado ni eliminado.
+
+**Respuesta:**
+```json
+{
+  "message": "User updated successfully",
+  "user": { ... }
+}
+```
+
+---
+
+### Eliminar Usuario (Admin - Soft Delete)
+```http
+DELETE /users/{id}
+Authorization: Bearer {token}
+```
+
+**Respuesta:**
+```json
+{
+  "message": "User deleted successfully"
+}
+```
+
+**Nota:** El usuario superadmin no puede ser eliminado.
 
 ---
 
@@ -605,6 +663,11 @@ GET /health
 - El token se obtiene al hacer login o registro
 - El token expira en 7 días (configurable)
 
+### Roles de Usuario
+- `user`: Usuario regular
+- `admin`: Administrador (acceso a gestión de usuarios)
+- `superadmin`: Super administrador (julioleon2004@gmail.com, no puede ser eliminado)
+
 ### Códigos de Estado HTTP
 - `200` - OK
 - `201` - Created
@@ -634,3 +697,13 @@ Los endpoints de listado soportan paginación:
 - `failed` - Fallido
 - `refunded` - Reembolsado
 
+### Categorías Automáticas
+- Las categorías se crean automáticamente basándose en los canales de YouTube
+- Cada canal de YouTube genera su propia categoría
+- Las categorías se reutilizan para videos del mismo canal
+
+### YouTube API
+- Requiere configurar `YOUTUBE_API_KEY` en el archivo `.env`
+- Consultar `YOUTUBE_API_KEY_GUIDE.md` para instrucciones de configuración
+- Cuota diaria gratuita: 10,000 unidades
+- Búsqueda: 100 unidades por llamada

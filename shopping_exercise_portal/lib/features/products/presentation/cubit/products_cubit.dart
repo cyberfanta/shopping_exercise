@@ -89,8 +89,25 @@ class ProductsCubit extends Cubit<ProductsState> {
     }
   }
 
-  Future<List<Map<String, dynamic>>> searchYoutubeVideos(String query) async {
-    return await _productService.searchYoutubeVideos(query);
+  Future<List<Map<String, dynamic>>> searchYoutubeVideos(
+    String query, {
+    String order = 'relevance',
+    String videoDuration = 'any',
+  }) async {
+    return await _productService.searchYoutubeVideos(
+      query,
+      order: order,
+      videoDuration: videoDuration,
+    );
+  }
+
+  Future<void> createMultipleProducts(List<Map<String, dynamic>> products) async {
+    try {
+      await _productService.createMultipleProducts(products);
+      await loadProducts();
+    } catch (e) {
+      emit(ProductsError(e.toString()));
+    }
   }
 }
 

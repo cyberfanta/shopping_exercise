@@ -21,9 +21,18 @@ router.post('/', authMiddleware, [
   body('name').notEmpty().trim(),
   body('description').optional().trim(),
   body('price').isFloat({ min: 0 }),
-  body('stock').isInt({ min: 0 }),
-  body('category_id').optional().isUUID()
+  body('stock').optional().isInt({ min: 0 }),
+  body('youtube_video_id').optional().trim(),
+  body('youtube_channel_id').optional().trim(),
+  body('youtube_channel_name').optional().trim(),
 ], productController.createProduct);
+
+// Create multiple products (protected)
+router.post('/bulk', authMiddleware, [
+  body('products').isArray({ min: 1 }),
+  body('products.*.name').notEmpty().trim(),
+  body('products.*.price').isFloat({ min: 0 }),
+], productController.createMultipleProducts);
 
 // Update product (protected)
 router.put('/:id', authMiddleware, [

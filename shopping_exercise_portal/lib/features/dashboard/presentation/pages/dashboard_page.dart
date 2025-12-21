@@ -132,9 +132,9 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             destinations: const [
               NavigationRailDestination(
-                icon: Icon(Icons.inventory_2_outlined),
-                selectedIcon: Icon(Icons.inventory_2),
-                label: Text('Productos'),
+                icon: Icon(Icons.video_library_outlined),
+                selectedIcon: Icon(Icons.video_library),
+                label: Text('Videos'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.people_outline),
