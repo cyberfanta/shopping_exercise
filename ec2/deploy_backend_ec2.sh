@@ -734,6 +734,8 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
                 -e PORT=3000 \
                 -e DATABASE_URL=postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db \
                 -e DB_SSL=false \
+                -e JWT_SECRET=f3c9e8b1a47d2e9c5f0a3d7b9e6c1f4a8d2b7c9e1f0a4b3c7d9e2f1a6c8b0d3 \
+                -e JWT_EXPIRES_IN=1d \
                 shopping_exercise_backend-api:latest || {
                 echo "  ❌ ERROR: No se pudo crear contenedor API"
                 exit 1
@@ -909,12 +911,15 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
                                 --network shopping_network \
                                 -p 3000:3000 \
                                 -e NODE_ENV=production \
-                                -e PORT=3000 \
-                                -e DATABASE_URL=postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db \
-                                shopping_exercise_backend-api:latest || {
-                                echo "  ❌ ERROR: No se pudo crear contenedor API"
-                                exit 1
-                            }
+                        -e PORT=3000 \
+                        -e DATABASE_URL=postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db \
+                        -e DB_SSL=false \
+                        -e JWT_SECRET=f3c9e8b1a47d2e9c5f0a3d7b9e6c1f4a8d2b7c9e1f0a4b3c7d9e2f1a6c8b0d3 \
+                        -e JWT_EXPIRES_IN=1d \
+                        shopping_exercise_backend-api:latest || {
+                        echo "  ❌ ERROR: No se pudo crear contenedor API"
+                        exit 1
+                    }
                         }
                     else
                         echo "  → Creando contenedor API manualmente..."
@@ -926,6 +931,8 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
                             -e PORT=3000 \
                             -e DATABASE_URL=postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db \
                             -e DB_SSL=false \
+                            -e JWT_SECRET=f3c9e8b1a47d2e9c5f0a3d7b9e6c1f4a8d2b7c9e1f0a4b3c7d9e2f1a6c8b0d3 \
+                            -e JWT_EXPIRES_IN=1d \
                             shopping_exercise_backend-api:latest || {
                             echo "  ❌ ERROR: No se pudo crear contenedor API"
                             exit 1
@@ -941,6 +948,8 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
                         -e PORT=3000 \
                         -e DATABASE_URL=postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db \
                         -e DB_SSL=false \
+                        -e JWT_SECRET=f3c9e8b1a47d2e9c5f0a3d7b9e6c1f4a8d2b7c9e1f0a4b3c7d9e2f1a6c8b0d3 \
+                        -e JWT_EXPIRES_IN=1d \
                         shopping_exercise_backend-api:latest || {
                         echo "  ❌ ERROR: No se pudo crear contenedor API"
                         exit 1
@@ -1173,6 +1182,13 @@ server {
     listen 80;
     server_name _;
     
+    # Health check directo (sin /api)
+    location = /health {
+        proxy_pass http://localhost:3000/health;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+    }
+    
     # Backend API en /api
     location /api {
         # El backend espera rutas con /api, así que mantenemos el path completo
@@ -1206,13 +1222,6 @@ server {
         # Buffer settings para peticiones grandes
         proxy_buffering off;
         proxy_request_buffering off;
-    }
-    
-    # Health check directo (opcional, para debugging)
-    location /health {
-        proxy_pass http://localhost:3000/health;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
     }
     
     # Adminer - Database Management UI en /adminer

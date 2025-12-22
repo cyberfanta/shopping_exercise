@@ -550,8 +550,8 @@ server {
         proxy_request_buffering off;
     }
     
-    # Health check directo
-    location /health {
+    # Health check directo (sin /api)
+    location = /health {
         proxy_pass http://localhost:3000/health;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
