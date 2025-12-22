@@ -121,11 +121,11 @@ echo "  → Compilando para web (release) con base-href=/portal/..."
 # Compilar con --base-href para que funcione correctamente desde /portal
 # Usar MSYS_NO_PATHCONV para evitar que Git Bash convierta rutas en Windows
 BASE_HREF="/portal/"
-# Intentar con --wasm primero, luego sin él
+# Intentar primero sin --wasm (más rápido y compatible), luego con --wasm
 if MSYS_NO_PATHCONV=1 flutter build web --release --base-href="$BASE_HREF" 2>&1; then
-    echo "  ✅ Compilación completada con --wasm y base-href=$BASE_HREF"
+    echo "  ✅ Compilación completada con base-href=$BASE_HREF"
 elif MSYS_NO_PATHCONV=1 flutter build web --release --wasm --base-href="$BASE_HREF" 2>&1; then
-    echo "  ✅ Compilación completada (sin --wasm) con base-href=$BASE_HREF"
+    echo "  ✅ Compilación completada con --wasm y base-href=$BASE_HREF"
 else
     echo "  ❌ ERROR: Falló la compilación de Flutter"
     exit 1
@@ -442,16 +442,42 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
     # Limpiar directorio destino si existe
     sudo rm -rf "\$NGINX_PORTAL_DIR"/*
     
+    # Verificar archivos críticos antes de copiar
+    CRITICAL_FILES=("index.html" "main.dart.js" "flutter.js" "flutter_bootstrap.js")
+    MISSING_FILES=()
+    for file in "\${CRITICAL_FILES[@]}"; do
+        if [ ! -f "\$PORTAL_DIR/build/web/\$file" ]; then
+            MISSING_FILES+=("\$file")
+        fi
+    done
+    
+    if [ \${#MISSING_FILES[@]} -gt 0 ]; then
+        echo "  ⚠️  ADVERTENCIA: Faltan algunos archivos: \${MISSING_FILES[*]}"
+        echo "  💡 Archivos disponibles en build/web:"
+        ls -la "\$PORTAL_DIR/build/web/" | head -15
+    else
+        echo "  ✅ Todos los archivos críticos presentes"
+    fi
+    
     # Copiar archivos (usar . para copiar todo el contenido)
+    echo "  → Copiando archivos de \$PORTAL_DIR/build/web a \$NGINX_PORTAL_DIR..."
     sudo cp -r "\$PORTAL_DIR/build/web/." "\$NGINX_PORTAL_DIR/" || {
         echo "  ❌ ERROR: No se pudieron copiar los archivos"
         echo "  💡 Verificando permisos y contenido:"
+        echo "     Origen: \$PORTAL_DIR/build/web/"
         ls -la "\$PORTAL_DIR/build/web/" | head -10
+        echo "     Destino: \$NGINX_PORTAL_DIR"
+        sudo ls -la "\$NGINX_PORTAL_DIR" 2>/dev/null || echo "  (Directorio no existe o sin permisos)"
         exit 1
     }
     
+    # Configurar permisos
     sudo chown -R nginx:nginx "\$NGINX_PORTAL_DIR"
-    echo "  ✅ Archivos copiados correctamente"
+    sudo chmod -R 755 "\$NGINX_PORTAL_DIR"
+    sudo find "\$NGINX_PORTAL_DIR" -type f -exec chmod 644 {} \;
+    sudo find "\$NGINX_PORTAL_DIR" -type d -exec chmod 755 {} \;
+    
+    echo "  ✅ Archivos copiados y permisos configurados"
     
     # Verificar que index.html existe
     if [ ! -f "\$NGINX_PORTAL_DIR/index.html" ]; then
@@ -586,13 +612,28 @@ server {
 NGINXCONF
     
     echo "  → Probando configuración de nginx..."
-    sudo nginx -t
+    if sudo nginx -t 2>&1; then
+        echo "  ✅ Configuración de nginx válida"
+    else
+        echo "  ❌ ERROR: Configuración de nginx inválida"
+        echo "  💡 Revisa los errores arriba"
+        exit 1
+    fi
     
     echo "  → Reiniciando nginx..."
     sudo systemctl restart nginx
+    sleep 2
+    
+    # Verificar que nginx esté corriendo
+    if sudo systemctl is-active --quiet nginx; then
+        echo "  ✅ nginx está corriendo"
+    else
+        echo "  ❌ ERROR: nginx no está corriendo"
+        echo "  💡 Revisa los logs: sudo journalctl -u nginx -n 50"
+        exit 1
+    fi
     
     echo "  → Verificando que el backend esté accesible..."
-    sleep 2
     if curl -s -f -m 5 http://localhost:3000/health >/dev/null 2>&1; then
         echo "  ✅ Backend responde en localhost:3000"
     else
@@ -610,6 +651,27 @@ NGINXCONF
         echo "  💡 Verifica la configuración de nginx:"
         echo "     sudo nginx -t"
         echo "     sudo tail -f /var/log/nginx/error.log"
+    fi
+    
+    echo "  → Verificando que el portal esté accesible..."
+    if curl -s -f -m 5 http://localhost/portal/ >/dev/null 2>&1; then
+        echo "  ✅ Portal responde en localhost/portal/"
+        echo "  → Verificando contenido del index.html..."
+        if curl -s http://localhost/portal/ | grep -q "flutter"; then
+            echo "  ✅ Portal sirve contenido Flutter correctamente"
+        else
+            echo "  ⚠️  ADVERTENCIA: El contenido del portal puede no ser correcto"
+            echo "  💡 Verifica los archivos en: \$NGINX_PORTAL_DIR"
+        fi
+    else
+        echo "  ❌ ERROR: Portal no responde en localhost/portal/"
+        echo "  💡 Verifica:"
+        echo "     - Archivos en \$NGINX_PORTAL_DIR:"
+        ls -la "\$NGINX_PORTAL_DIR" | head -10
+        echo "     - Permisos:"
+        sudo ls -ld "\$NGINX_PORTAL_DIR"
+        echo "     - Logs de nginx:"
+        sudo tail -20 /var/log/nginx/error.log
     fi
     
     echo "  ✅ nginx configurado para /portal"

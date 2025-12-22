@@ -123,9 +123,9 @@ echo "  → Compilando para web (release) con base-href=/app/..."
 BASE_HREF="/app/"
 # Intentar con --wasm primero, luego sin él
 if MSYS_NO_PATHCONV=1 flutter build web --release --base-href="$BASE_HREF" 2>&1; then
-    echo "  ✅ Compilación completada con --wasm y base-href=$BASE_HREF"
+    echo "  ✅ Compilación completada con base-href=$BASE_HREF"
 elif MSYS_NO_PATHCONV=1 flutter build web --release --wasm --base-href="$BASE_HREF" 2>&1; then
-    echo "  ✅ Compilación completada (sin --wasm) con base-href=$BASE_HREF"
+    echo "  ✅ Compilación completada con --wasm con base-href=$BASE_HREF"
 else
     echo "  ❌ ERROR: Falló la compilación de Flutter"
     exit 1
