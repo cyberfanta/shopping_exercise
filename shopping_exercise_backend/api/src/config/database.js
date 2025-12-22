@@ -1,8 +1,14 @@
 const { Pool } = require('pg');
 
+// Configurar SSL solo si está explícitamente requerido
+// En Docker local, PostgreSQL no tiene SSL habilitado
+const sslConfig = process.env.DB_SSL === 'true' 
+  ? { rejectUnauthorized: false } 
+  : false;
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: sslConfig
 });
 
 pool.on('connect', () => {

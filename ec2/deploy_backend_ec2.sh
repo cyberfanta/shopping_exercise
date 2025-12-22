@@ -666,6 +666,22 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
             echo "  ✅ Imágenes construidas (método directo)"
         fi
         
+        echo "  → Configurando variables de entorno para producción..."
+        # Asegurar que DB_SSL esté configurado en docker-compose.yml
+        if grep -q "DB_SSL" docker-compose.yml 2>/dev/null; then
+            echo "  ✅ DB_SSL ya está configurado en docker-compose.yml"
+        else
+            echo "  → Agregando DB_SSL=false a docker-compose.yml..."
+            # Agregar DB_SSL después de DATABASE_URL
+            sudo sed -i '/DATABASE_URL:/a\      DB_SSL: '\''false'\''' docker-compose.yml || {
+                echo "  ⚠️  No se pudo actualizar docker-compose.yml automáticamente"
+                echo "  💡 Asegúrate de que DB_SSL=false esté en las variables de entorno del servicio api"
+            }
+        fi
+        
+        # Actualizar NODE_ENV a production si está en development
+        sudo sed -i "s/NODE_ENV: development/NODE_ENV: production/" docker-compose.yml 2>/dev/null || true
+        
         echo "  → Iniciando contenedores..."
         # Verificar que docker-compose funcione antes de usarlo
         if docker compose version &> /dev/null 2>&1; then
@@ -746,6 +762,7 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
                             -e NODE_ENV=production \
                             -e PORT=3000 \
                             -e DATABASE_URL=postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db \
+                            -e DB_SSL=false \
                             shopping_exercise_backend-api:latest || {
                             echo "  ❌ ERROR: No se pudo crear contenedor API"
                             exit 1

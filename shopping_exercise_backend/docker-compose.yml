@@ -27,6 +27,7 @@ services:
       NODE_ENV: development
       PORT: 3000
       DATABASE_URL: postgresql://postgres:postgres123@postgres:5432/shopping_db
+      DB_SSL: 'false'
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
       JWT_EXPIRES_IN: 7d
       SMTP_HOST: smtp.gmail.com
