@@ -25,8 +25,8 @@
 
 GITHUB_USERNAME="cyberfanta"         # ⚠️ REQUERIDO: Tu usuario de GitHub
 GITHUB_REPO="shopping_exercise"      # ⚠️ REQUERIDO: Nombre del repositorio
-APP_URL=""                 # ⚠️ REQUERIDO: URL de la app Flutter (ej: http://XX.XX.XX.XX)
-PORTAL_URL=""              # ⚠️ REQUERIDO: URL del portal Flutter (ej: http://YY.YY.YY.YY)
+APP_URL="http://100.49.43.143/app/"                 # ⚠️ REQUERIDO: URL de la app Flutter (ej: http://XX.XX.XX.XX)
+PORTAL_URL="http://100.49.43.143/portal/"              # ⚠️ REQUERIDO: URL del portal Flutter (ej: http://YY.YY.YY.YY)
 GITHUB_TOKEN=""            # Opcional: Token de acceso personal
 REPO_NAME="landing-page"   # Nombre del repositorio para la landing page
 
