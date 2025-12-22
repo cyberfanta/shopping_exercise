@@ -2,13 +2,26 @@ const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 
 async function addPublicUser() {
-  const pool = new Pool({
-    host: process.env.DB_HOST || 'postgres',
-    port: process.env.DB_PORT || 5432,
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres123',
-    database: process.env.DB_NAME || 'shopping_db'
-  });
+  // Usar DATABASE_URL si está disponible (formato: postgresql://user:pass@host:port/db)
+  // Si no, usar variables individuales o valores por defecto
+  let pool;
+  
+  if (process.env.DATABASE_URL) {
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: false  // No usar SSL en Docker
+    });
+  } else {
+    // Intentar con el nombre del contenedor Docker primero
+    pool = new Pool({
+      host: process.env.DB_HOST || 'shopping_postgres',
+      port: process.env.DB_PORT || 5432,
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || 'postgres123',
+      database: process.env.DB_NAME || 'shopping_db',
+      ssl: false
+    });
+  }
 
   try {
     const email = 'user@ejemplo.com';

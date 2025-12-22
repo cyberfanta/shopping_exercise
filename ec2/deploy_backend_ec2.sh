@@ -712,13 +712,30 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
                 sudo docker start shopping_postgres 2>/dev/null || true
             else
                 echo "  → Creando contenedor PostgreSQL..."
-                sudo docker run -d \
+                # Verificar si existe init.sql para montarlo
+                INIT_SQL_PATH=""
+                if [ -f "database/init.sql" ]; then
+                    INIT_SQL_PATH="$(pwd)/database/init.sql"
+                    echo "  → Encontrado init.sql, montándolo en el contenedor"
+                else
+                    echo "  ⚠️  ADVERTENCIA: No se encontró database/init.sql"
+                    echo "  💡 La base de datos se creará vacía"
+                fi
+                
+                POSTGRES_CMD="sudo docker run -d \
                     --name shopping_postgres \
                     --network shopping_network \
                     -e POSTGRES_PASSWORD=postgres123 \
                     -e POSTGRES_DB=shopping_db \
-                    -e POSTGRES_USER=postgres \
-                    postgres:15-alpine || {
+                    -e POSTGRES_USER=postgres"
+                
+                if [ -n "\$INIT_SQL_PATH" ]; then
+                    POSTGRES_CMD="\$POSTGRES_CMD -v \$INIT_SQL_PATH:/docker-entrypoint-initdb.d/init.sql"
+                fi
+                
+                POSTGRES_CMD="\$POSTGRES_CMD postgres:15-alpine"
+                
+                eval \$POSTGRES_CMD || {
                     echo "  ❌ ERROR: No se pudo crear contenedor PostgreSQL"
                     exit 1
                 }
@@ -777,12 +794,30 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
                         -e NODE_ENV=production \
                         -e PORT=3000 \
                         -e DATABASE_URL=postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db \
+                        -e DB_SSL=false \
                         shopping_exercise_backend-api:latest || {
                         echo "  ❌ ERROR: No se pudo crear contenedor API"
                         exit 1
                     }
                 fi
             fi
+            
+            # Iniciar Adminer
+            if sudo docker ps -a --format "{{.Names}}" | grep -q "^shopping_adminer$"; then
+                echo "  → Iniciando contenedor Adminer existente..."
+                sudo docker start shopping_adminer 2>/dev/null || true
+            else
+                echo "  → Creando contenedor Adminer..."
+                sudo docker run -d \
+                    --name shopping_adminer \
+                    --network shopping_network \
+                    -p 8080:8080 \
+                    adminer:latest || {
+                    echo "  ❌ ERROR: No se pudo crear contenedor Adminer"
+                    exit 1
+                }
+            fi
+            
             echo "  ✅ Contenedores iniciados manualmente"
         fi
     fi
@@ -814,31 +849,92 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
     fi
     
     echo ""
-    echo "  → Verificando que el API responda..."
-    sleep 5
-    MAX_RETRIES=5
-    RETRY_COUNT=0
-    API_RESPONDING=false
+    echo "  → Verificando si la base de datos necesita inicialización..."
+    # Esperar un poco más para que PostgreSQL esté completamente listo
+    sleep 3
     
-    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-        if curl -s -f -m 5 http://localhost:3000/health >/dev/null 2>&1; then
-            echo "  ✅ El API responde correctamente en localhost:3000"
-            API_RESPONDING=true
-            break
-        else
-            RETRY_COUNT=$((RETRY_COUNT + 1))
-            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                echo "  ⏳ Esperando API... (intento $RETRY_COUNT/$MAX_RETRIES)"
-                sleep 5
+    # Verificar si la tabla users existe (indicador de que la BD está inicializada)
+    if sudo docker exec shopping_postgres psql -U postgres -d shopping_db -c "\dt" 2>&1 | grep -q "users"; then
+        echo "  ✅ La base de datos tiene tablas (ya está inicializada)"
+        # Verificar si hay datos
+        USER_COUNT=$(sudo docker exec shopping_postgres psql -U postgres -d shopping_db -t -c "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d ' ' || echo "0")
+        if [ "$USER_COUNT" = "0" ] || [ -z "$USER_COUNT" ]; then
+            echo "  ⚠️  La base de datos está vacía (sin usuarios)"
+            echo "  → Creando usuario público..."
+            if [ -f "api/add_public_user.js" ]; then
+                # Usar DATABASE_URL con el nombre correcto del contenedor
+                if sudo docker exec -e DATABASE_URL="postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db" shopping_api node add_public_user.js 2>&1; then
+                    echo "  ✅ Usuario público creado correctamente"
+                else
+                    echo "  ⚠️  No se pudo crear el usuario público automáticamente"
+                    echo "  💡 Puedes ejecutarlo manualmente:"
+                    echo "     sudo docker exec -e DATABASE_URL='postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db' shopping_api node add_public_user.js"
+                fi
+            else
+                echo "  ⚠️  No se encontró api/add_public_user.js"
             fi
+        else
+            echo "  ✅ La base de datos tiene $USER_COUNT usuario(s)"
         fi
-    done
-    
-    if [ "$API_RESPONDING" = false ]; then
-        echo "  ⚠️  El API aún no responde después de $MAX_RETRIES intentos"
-        echo "  💡 Revisa los logs con: sudo docker logs shopping_api"
-        echo "  💡 Verifica el estado con: sudo docker ps"
+    else
+        echo "  ⚠️  La base de datos parece estar vacía (sin tablas)"
+        echo "  → Intentando ejecutar init.sql..."
+        
+        if [ -f "database/init.sql" ]; then
+            echo "  → Ejecutando init.sql..."
+            if sudo docker exec -i shopping_postgres psql -U postgres -d shopping_db < database/init.sql 2>&1; then
+                echo "  ✅ init.sql ejecutado correctamente"
+                echo "  → Verificando tablas creadas..."
+                sudo docker exec shopping_postgres psql -U postgres -d shopping_db -c "\dt" 2>&1 | head -20
+                
+                # Crear usuario público después de inicializar
+                echo "  → Creando usuario público..."
+                if [ -f "api/add_public_user.js" ]; then
+                    sleep 2  # Esperar un poco para que las tablas estén listas
+                    # Usar DATABASE_URL con el nombre correcto del contenedor
+                    if sudo docker exec -e DATABASE_URL="postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db" shopping_api node add_public_user.js 2>&1; then
+                        echo "  ✅ Usuario público creado correctamente"
+                    else
+                        echo "  ⚠️  No se pudo crear el usuario público automáticamente"
+                        echo "  💡 Puedes ejecutarlo manualmente:"
+                        echo "     sudo docker exec -e DATABASE_URL='postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db' shopping_api node add_public_user.js"
+                    fi
+                fi
+            else
+                echo "  ⚠️  ADVERTENCIA: No se pudo ejecutar init.sql automáticamente"
+                echo "  💡 Puedes ejecutarlo manualmente:"
+                echo "     sudo docker exec -i shopping_postgres psql -U postgres -d shopping_db < database/init.sql"
+            fi
+        else
+            echo "  ❌ ERROR: No se encontró database/init.sql"
+            echo "  💡 La base de datos necesita ser inicializada manualmente"
+        fi
     fi
+    
+    # Crear usuario público si no existe (después de verificar/crear tablas)
+    echo ""
+    echo "  → Verificando si existe el usuario público..."
+    USER_COUNT=$(sudo docker exec shopping_postgres psql -U postgres -d shopping_db -t -c "SELECT COUNT(*) FROM users WHERE email = 'user@ejemplo.com';" 2>/dev/null | tr -d ' ' || echo "0")
+    if [ "$USER_COUNT" = "0" ] || [ -z "$USER_COUNT" ]; then
+        echo "  ⚠️  El usuario público no existe"
+        echo "  → Creando usuario público..."
+        if [ -f "api/add_public_user.js" ]; then
+            sleep 2  # Esperar un poco para que las tablas estén listas
+            # Usar DATABASE_URL con el nombre correcto del contenedor
+            if sudo docker exec -e DATABASE_URL="postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db" shopping_api node add_public_user.js 2>&1; then
+                echo "  ✅ Usuario público creado correctamente"
+            else
+                echo "  ⚠️  No se pudo crear el usuario público automáticamente"
+                echo "  💡 Puedes ejecutarlo manualmente:"
+                echo "     sudo docker exec -e DATABASE_URL='postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db' shopping_api node add_public_user.js"
+            fi
+        else
+            echo "  ⚠️  No se encontró api/add_public_user.js"
+        fi
+    else
+        echo "  ✅ El usuario público ya existe"
+    fi
+    
     
     echo ""
     echo "  ✅ Verificación completada"
@@ -922,6 +1018,22 @@ server {
         proxy_pass http://localhost:3000/health;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
+    }
+    
+    # Adminer - Database Management UI en /adminer
+    location /adminer {
+        proxy_pass http://localhost:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+        
+        # Rewrite para que Adminer funcione correctamente
+        rewrite ^/adminer/?(.*) /\$1 break;
     }
     
     # Redirigir raíz a /api por ahora (se actualizará cuando haya apps Flutter)
