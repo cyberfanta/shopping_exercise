@@ -105,7 +105,7 @@ fi
 echo ""
 
 echo "→ Health check a través de nginx (/api/health):"
-NGINX_HEALTH_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" http://localhost/api/health 2>&1)
+NGINX_HEALTH_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" http://localhost/health 2>&1)
 NGINX_HEALTH_CODE=$(echo "$NGINX_HEALTH_RESPONSE" | grep "HTTP_CODE" | cut -d: -f2)
 NGINX_HEALTH_BODY=$(echo "$NGINX_HEALTH_RESPONSE" | grep -v "HTTP_CODE")
 
@@ -189,6 +189,18 @@ echo ""
 
 echo "→ DB_SSL:"
 sudo docker inspect shopping_api --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep DB_SSL || echo "  (No encontrado - debería ser DB_SSL=false)"
+echo ""
+
+echo "→ JWT_SECRET:"
+JWT_SECRET_FOUND=$(sudo docker inspect shopping_api --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep JWT_SECRET || echo "")
+if [ -z "$JWT_SECRET_FOUND" ]; then
+    echo -e "${RED}❌ JWT_SECRET NO encontrado - el contenedor necesita ser reconstruido${NC}"
+    echo "  💡 Ejecuta: sudo docker stop shopping_api && sudo docker rm shopping_api"
+    echo "  💡 Luego ejecuta el script de deployment para recrear el contenedor"
+else
+    echo -e "${GREEN}✅ JWT_SECRET encontrado${NC}"
+    echo "  $JWT_SECRET_FOUND"
+fi
 echo ""
 
 # ============================================================================

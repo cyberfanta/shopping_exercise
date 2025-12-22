@@ -709,6 +709,20 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
             NEEDS_REBUILD=true
         fi
         
+        # Verificar si el contenedor tiene JWT_SECRET configurado
+        if sudo docker inspect shopping_api 2>/dev/null | grep -q '"JWT_SECRET"'; then
+            JWT_SECRET_VALUE=$(sudo docker inspect shopping_api 2>/dev/null | grep -A 1 '"JWT_SECRET"' | grep '"Value"' | cut -d'"' -f4 || echo "")
+            if [ -n "$JWT_SECRET_VALUE" ] && [ "$JWT_SECRET_VALUE" != "" ]; then
+                echo "  ✅ Contenedor API tiene JWT_SECRET configurado"
+            else
+                echo "  ⚠️  Contenedor API tiene JWT_SECRET pero está vacío"
+                NEEDS_REBUILD=true
+            fi
+        else
+            echo "  ⚠️  Contenedor API NO tiene JWT_SECRET configurado"
+            NEEDS_REBUILD=true
+        fi
+        
         if [ "$NEEDS_REBUILD" = true ]; then
             echo "  → Reconstruyendo contenedor API para aplicar configuración correcta..."
             # Detener y eliminar solo el API, no PostgreSQL
