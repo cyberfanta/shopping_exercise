@@ -629,49 +629,57 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
                     echo "  ⚠️  No se pudo iniciar PostgreSQL existente, creando nuevo..."
                     # Crear red si no existe
                     sudo docker network create shopping_network 2>/dev/null || true
-                    # Crear nuevo contenedor PostgreSQL
-                    INIT_SQL_PATH=""
-                    if [ -f "database/init.sql" ]; then
-                        INIT_SQL_PATH="$(pwd)/database/init.sql"
-                    fi
-                    POSTGRES_CMD="sudo docker run -d \
+                    # Crear nuevo contenedor PostgreSQL (sin montar init.sql, lo ejecutaremos después)
+                    echo "  → Creando nuevo contenedor PostgreSQL..."
+                    sudo docker run -d \
                         --name shopping_postgres \
                         --network shopping_network \
                         -e POSTGRES_PASSWORD=postgres123 \
                         -e POSTGRES_DB=shopping_db \
-                        -e POSTGRES_USER=postgres"
-                    if [ -n "\$INIT_SQL_PATH" ]; then
-                        POSTGRES_CMD="\$POSTGRES_CMD -v \$INIT_SQL_PATH:/docker-entrypoint-initdb.d/init.sql"
-                    fi
-                    POSTGRES_CMD="\$POSTGRES_CMD postgres:15-alpine"
-                    eval \$POSTGRES_CMD || {
+                        -e POSTGRES_USER=postgres \
+                        postgres:15-alpine || {
                         echo "  ❌ ERROR: No se pudo crear contenedor PostgreSQL"
                         exit 1
                     }
+                    echo "  ✅ Contenedor PostgreSQL creado (init.sql se ejecutará después si es necesario)"
                 }
                 sleep 5  # Esperar a que PostgreSQL esté listo
             else
                 echo "  ⚠️  Contenedor PostgreSQL no existe, creándolo..."
                 # Crear red si no existe
                 sudo docker network create shopping_network 2>/dev/null || true
-                INIT_SQL_PATH=""
-                if [ -f "database/init.sql" ]; then
-                    INIT_SQL_PATH="$(pwd)/database/init.sql"
+                
+                # Verificar si existe init.sql
+                BACKEND_DIR="\$(pwd)"
+                INIT_SQL_FILE="\${BACKEND_DIR}/database/init.sql"
+                
+                if [ -f "\$INIT_SQL_FILE" ] && [ ! -d "\$INIT_SQL_FILE" ]; then
+                    echo "  → Encontrado init.sql, montándolo en el contenedor"
+                    echo "  → Ruta: \$INIT_SQL_FILE"
+                    sudo docker run -d \
+                        --name shopping_postgres \
+                        --network shopping_network \
+                        -e POSTGRES_PASSWORD=postgres123 \
+                        -e POSTGRES_DB=shopping_db \
+                        -e POSTGRES_USER=postgres \
+                        -v "\$INIT_SQL_FILE:/docker-entrypoint-initdb.d/init.sql:ro" \
+                        postgres:15-alpine || {
+                        echo "  ❌ ERROR: No se pudo crear contenedor PostgreSQL"
+                        exit 1
+                    }
+                else
+                    echo "  ⚠️  No se encontró database/init.sql, creando contenedor sin él"
+                    sudo docker run -d \
+                        --name shopping_postgres \
+                        --network shopping_network \
+                        -e POSTGRES_PASSWORD=postgres123 \
+                        -e POSTGRES_DB=shopping_db \
+                        -e POSTGRES_USER=postgres \
+                        postgres:15-alpine || {
+                        echo "  ❌ ERROR: No se pudo crear contenedor PostgreSQL"
+                        exit 1
+                    }
                 fi
-                POSTGRES_CMD="sudo docker run -d \
-                    --name shopping_postgres \
-                    --network shopping_network \
-                    -e POSTGRES_PASSWORD=postgres123 \
-                    -e POSTGRES_DB=shopping_db \
-                    -e POSTGRES_USER=postgres"
-                if [ -n "\$INIT_SQL_PATH" ]; then
-                    POSTGRES_CMD="\$POSTGRES_CMD -v \$INIT_SQL_PATH:/docker-entrypoint-initdb.d/init.sql"
-                fi
-                POSTGRES_CMD="\$POSTGRES_CMD postgres:15-alpine"
-                eval \$POSTGRES_CMD || {
-                    echo "  ❌ ERROR: No se pudo crear contenedor PostgreSQL"
-                    exit 1
-                }
                 sleep 5
             fi
         else
@@ -864,33 +872,19 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
                 sudo docker start shopping_postgres 2>/dev/null || true
             else
                 echo "  → Creando contenedor PostgreSQL..."
-                # Verificar si existe init.sql para montarlo
-                INIT_SQL_PATH=""
-                if [ -f "database/init.sql" ]; then
-                    INIT_SQL_PATH="$(pwd)/database/init.sql"
-                    echo "  → Encontrado init.sql, montándolo en el contenedor"
-                else
-                    echo "  ⚠️  ADVERTENCIA: No se encontró database/init.sql"
-                    echo "  💡 La base de datos se creará vacía"
-                fi
-                
-                POSTGRES_CMD="sudo docker run -d \
+                # Crear contenedor sin montar init.sql (lo ejecutaremos después)
+                # Esto evita problemas con el montaje del volumen
+                sudo docker run -d \
                     --name shopping_postgres \
                     --network shopping_network \
                     -e POSTGRES_PASSWORD=postgres123 \
                     -e POSTGRES_DB=shopping_db \
-                    -e POSTGRES_USER=postgres"
-                
-                if [ -n "\$INIT_SQL_PATH" ]; then
-                    POSTGRES_CMD="\$POSTGRES_CMD -v \$INIT_SQL_PATH:/docker-entrypoint-initdb.d/init.sql"
-                fi
-                
-                POSTGRES_CMD="\$POSTGRES_CMD postgres:15-alpine"
-                
-                eval \$POSTGRES_CMD || {
+                    -e POSTGRES_USER=postgres \
+                    postgres:15-alpine || {
                     echo "  ❌ ERROR: No se pudo crear contenedor PostgreSQL"
                     exit 1
                 }
+                echo "  ✅ Contenedor PostgreSQL creado (init.sql se ejecutará después si es necesario)"
             fi
             
             # Esperar a que PostgreSQL esté listo
@@ -1018,8 +1012,11 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
     # Esperar un poco más para que PostgreSQL esté completamente listo
     sleep 3
     
-    # Verificar si la tabla users existe (indicador de que la BD está inicializada)
-    if sudo docker exec shopping_postgres psql -U postgres -d shopping_db -c "\dt" 2>&1 | grep -q "users"; then
+    # Verificar si PostgreSQL está corriendo
+    if ! sudo docker ps --format "{{.Names}}" | grep -q "^shopping_postgres$"; then
+        echo "  ⚠️  PostgreSQL no está corriendo, no se puede verificar la base de datos"
+        echo "  💡 Inicia PostgreSQL primero: sudo docker start shopping_postgres"
+    elif sudo docker exec shopping_postgres psql -U postgres -d shopping_db -c "\dt" 2>&1 | grep -q "users"; then
         echo "  ✅ La base de datos tiene tablas (ya está inicializada)"
         # Verificar si hay datos
         USER_COUNT=$(sudo docker exec shopping_postgres psql -U postgres -d shopping_db -t -c "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d ' ' || echo "0")
