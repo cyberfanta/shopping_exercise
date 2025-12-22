@@ -509,23 +509,23 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
         git reset --hard HEAD 2>/dev/null || true
         git clean -fd 2>/dev/null || true
         
-        # Intentar pull de main primero, luego master, luego la rama actual
+        # Intentar pull de master primero, luego main, luego la rama actual
         echo "  → Actualizando código..."
-        if git pull origin main 2>/dev/null; then
-            echo "  ✅ Repositorio actualizado desde main"
-        elif git pull origin master 2>/dev/null; then
+        if git pull origin master 2>/dev/null; then
             echo "  ✅ Repositorio actualizado desde master"
+        elif git pull origin main 2>/dev/null; then
+            echo "  ✅ Repositorio actualizado desde main"
         elif [ -n "\$CURRENT_BRANCH" ] && git pull origin "\$CURRENT_BRANCH" 2>/dev/null; then
             echo "  ✅ Repositorio actualizado desde \$CURRENT_BRANCH"
         elif git pull 2>/dev/null; then
             echo "  ✅ Repositorio actualizado"
         else
             echo "  ⚠️  No se pudo hacer pull automático, forzando actualización..."
-            # Forzar actualización desde origin/main o origin/master
-            if git fetch origin main 2>/dev/null && git reset --hard origin/main 2>/dev/null; then
-                echo "  ✅ Repositorio actualizado forzadamente desde origin/main"
-            elif git fetch origin master 2>/dev/null && git reset --hard origin/master 2>/dev/null; then
+            # Forzar actualización desde origin/master o origin/main
+            if git fetch origin master 2>/dev/null && git reset --hard origin/master 2>/dev/null; then
                 echo "  ✅ Repositorio actualizado forzadamente desde origin/master"
+            elif git fetch origin main 2>/dev/null && git reset --hard origin/main 2>/dev/null; then
+                echo "  ✅ Repositorio actualizado forzadamente desde origin/main"
             else
                 echo "  ⚠️  No se pudo actualizar, pero continuando con código existente..."
             fi
@@ -853,6 +853,12 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
     # Crear directorio de configuración si no existe
     sudo mkdir -p /etc/nginx/conf.d
     
+    # Limpiar otras configuraciones que puedan causar conflicto
+    echo "  → Limpiando configuraciones antiguas de nginx..."
+    sudo rm -f /etc/nginx/conf.d/default.conf 2>/dev/null || true
+    sudo rm -f /etc/nginx/conf.d/flutter-app.conf 2>/dev/null || true
+    sudo rm -f /etc/nginx/conf.d/flutter-portal.conf 2>/dev/null || true
+    
     # Crear configuración base de nginx (se actualizará cuando se desplieguen las apps Flutter)
     sudo tee /etc/nginx/conf.d/shopping-app.conf > /dev/null << 'NGINXCONF'
 server {
@@ -861,6 +867,7 @@ server {
     
     # Backend API en /api
     location /api {
+        # El backend espera rutas con /api, así que mantenemos el path completo
         proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
@@ -869,12 +876,28 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
         proxy_cache_bypass \$http_upgrade;
+        
+        # Headers para CORS (si el backend no los maneja completamente)
+        add_header Access-Control-Allow-Origin * always;
+        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Authorization, Content-Type, X-Requested-With" always;
+        
+        # Manejar preflight OPTIONS
+        if (\$request_method = OPTIONS) {
+            return 204;
+        }
         
         # Timeouts
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
+        
+        # Buffer settings para peticiones grandes
+        proxy_buffering off;
+        proxy_request_buffering off;
     }
     
     # Health check directo (opcional, para debugging)

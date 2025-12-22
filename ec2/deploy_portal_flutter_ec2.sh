@@ -5,11 +5,12 @@
 ###############################################################################
 #
 # Este script:
-# 1. Busca la instancia EC2 "shopping-app" (compartida con backend y app)
-# 2. Se conecta por SSH
-# 3. Actualiza el código desde GitHub
-# 4. Compila Flutter Web en modo release
-# 5. Configura nginx para servir el portal en /portal
+# 1. Compila Flutter Web localmente en modo release
+# 2. Hace commit y push de los archivos compilados
+# 3. Busca la instancia EC2 "shopping-app" (compartida con backend y app)
+# 4. Se conecta por SSH
+# 5. Actualiza el código desde GitHub
+# 6. Configura nginx para servir el portal en /portal
 #
 # CONFIGURACIÓN REQUERIDA:
 # =======================
@@ -72,6 +73,104 @@ echo "=================================================="
 echo "Región: $AWS_REGION"
 echo "Instance Name: $EC2_INSTANCE_NAME"
 echo "Key Pair: $KEY_PAIR_NAME"
+echo ""
+
+# ============================================================================
+# PASO 0: Compilar Flutter localmente y hacer commit
+# ============================================================================
+
+echo "🏗️  Paso 0: Compilando Flutter localmente..."
+
+# Detectar directorio del proyecto (puede ejecutarse desde /ec2 o desde raíz)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ "$SCRIPT_DIR" == *"/ec2" ]]; then
+    # Si se ejecuta desde /ec2, subir un nivel
+    PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+else
+    PROJECT_ROOT="$(pwd)"
+fi
+
+PORTAL_DIR="$PROJECT_ROOT/shopping_exercise_portal"
+
+echo "  📁 Directorio del proyecto: $PROJECT_ROOT"
+echo "  📁 Directorio del portal: $PORTAL_DIR"
+
+# Verificar que el directorio existe
+if [ ! -d "$PORTAL_DIR" ]; then
+    echo "  ❌ ERROR: No se encontró el directorio del portal: $PORTAL_DIR"
+    echo "  💡 Asegúrate de ejecutar el script desde la raíz del proyecto o desde /ec2"
+    exit 1
+fi
+
+# Verificar que Flutter está instalado localmente
+if ! command -v flutter &> /dev/null; then
+    echo "  ❌ ERROR: Flutter no está instalado en tu sistema local"
+    echo "  💡 Instala Flutter desde: https://flutter.dev/docs/get-started/install"
+    exit 1
+fi
+
+cd "$PORTAL_DIR"
+
+echo "  → Obteniendo dependencias..."
+flutter pub get || {
+    echo "  ❌ ERROR: Falló flutter pub get"
+    exit 1
+}
+
+echo "  → Compilando para web (release) con base-href=/portal/..."
+# Compilar con --base-href para que funcione correctamente desde /portal
+# Usar MSYS_NO_PATHCONV para evitar que Git Bash convierta rutas en Windows
+BASE_HREF="/portal/"
+# Intentar con --wasm primero, luego sin él
+if MSYS_NO_PATHCONV=1 flutter build web --release --base-href="$BASE_HREF" 2>&1; then
+    echo "  ✅ Compilación completada con --wasm y base-href=$BASE_HREF"
+elif MSYS_NO_PATHCONV=1 flutter build web --release --wasm --base-href="$BASE_HREF" 2>&1; then
+    echo "  ✅ Compilación completada (sin --wasm) con base-href=$BASE_HREF"
+else
+    echo "  ❌ ERROR: Falló la compilación de Flutter"
+    exit 1
+fi
+
+# Verificar que build/web existe
+if [ ! -d "build/web" ]; then
+    echo "  ❌ ERROR: Directorio build/web no existe después de la compilación"
+    exit 1
+fi
+
+echo "  ✅ Build completado localmente"
+
+# Hacer commit y push de los archivos compilados
+echo "  → Haciendo commit de los archivos compilados..."
+cd "$PROJECT_ROOT"
+
+# Verificar que estamos en un repositorio git
+if [ ! -d ".git" ]; then
+    echo "  ❌ ERROR: No se encontró un repositorio git en $PROJECT_ROOT"
+    exit 1
+fi
+
+# Agregar archivos build/web
+git add shopping_exercise_portal/build/web/ || {
+    echo "  ⚠️  No se pudieron agregar archivos (puede que no haya cambios)"
+}
+
+# Verificar si hay cambios para commitear
+if git diff --staged --quiet; then
+    echo "  ℹ️  No hay cambios nuevos para commitear"
+else
+    echo "  → Creando commit..."
+    git commit -m "Build portal Flutter web (release)" || {
+        echo "  ⚠️  No se pudo crear el commit (puede que no haya cambios)"
+    }
+    
+    echo "  → Haciendo push a GitHub..."
+    git push origin master 2>&1 || git push origin main 2>&1 || {
+        echo "  ⚠️  No se pudo hacer push (puede que no haya cambios o problemas de conexión)"
+    }
+    echo "  ✅ Cambios commiteados y pusheados"
+fi
+
+echo "  ✅ Compilación y commit completados"
 echo ""
 
 # ============================================================================
@@ -198,10 +297,46 @@ echo "📝 Historial de comandos: $HISTORY_FILE"
 echo ""
 
 # ============================================================================
-# PASO 5: Actualizar código desde GitHub
+# PASO 5: Instalar dependencias del sistema (Git y Nginx)
 # ============================================================================
 
-echo "📥 Paso 5: Actualizando código desde GitHub..."
+echo "📦 Paso 5: Verificando dependencias del sistema..."
+
+ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH | tee -a "$HISTORY_FILE"
+    set -e
+    
+    echo "  → Verificando Git..."
+    if ! command -v git &> /dev/null; then
+        echo "  → Instalando Git..."
+        sudo dnf install -y -q git
+    else
+        echo "  ✅ Git ya está instalado"
+    fi
+    
+    echo "  → Verificando Nginx..."
+    if ! command -v nginx &> /dev/null; then
+        echo "  → Instalando Nginx..."
+        sudo dnf install -y -q nginx
+        sudo systemctl start nginx
+        sudo systemctl enable nginx
+    else
+        echo "  ✅ Nginx ya está instalado"
+        if ! sudo systemctl is-active --quiet nginx; then
+            sudo systemctl start nginx
+        fi
+    fi
+    
+    echo "  ✅ Dependencias verificadas"
+ENDSSH
+
+echo "  ✅ Dependencias listas"
+echo ""
+
+# ============================================================================
+# PASO 6: Actualizar código desde GitHub
+# ============================================================================
+
+echo "📥 Paso 6: Actualizando código desde GitHub..."
 
 REPO_NAME=$(basename "$GITHUB_REPO_URL" .git)
 
@@ -222,11 +357,11 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
         # Actualizar desde git
         echo "  → Obteniendo cambios desde git..."
         git fetch origin 2>&1 || true
-        git reset --hard origin/main 2>&1 || git reset --hard origin/master 2>&1 || true
+        git reset --hard origin/master 2>&1 || git reset --hard origin/main 2>&1 || true
         git clean -fd 2>&1 || true
         
         # Intentar pull
-        git pull origin main 2>&1 || git pull origin master 2>&1 || true
+        git pull origin master 2>&1 || git pull origin main 2>&1 || true
     else
         echo "  → Repositorio no existe, clonando..."
         # Convertir SSH a HTTPS si no hay token
@@ -247,131 +382,10 @@ echo "  ✅ Código actualizado"
 echo ""
 
 # ============================================================================
-# PASO 6: Verificar Flutter (ya debería estar instalado)
+# PASO 7: Copiar archivos compilados y configurar nginx para /portal
 # ============================================================================
 
-echo "📦 Paso 6: Verificando Flutter..."
-
-ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH | tee -a "$HISTORY_FILE"
-    set -e
-    
-    export PATH="\$PATH:/home/ec2-user/flutter/bin"
-    
-    if ! command -v flutter &> /dev/null; then
-        echo "  ❌ ERROR: Flutter no está instalado"
-        echo "  💡 Ejecuta primero el script deploy_app_flutter_ec2.sh"
-        exit 1
-    fi
-    
-    echo "  → Verificando versión de Flutter..."
-    CURRENT_VERSION=\$(flutter --version | head -1 | awk '{print \$2}' 2>/dev/null || echo "unknown")
-    echo "  📌 Versión actual: \$CURRENT_VERSION"
-    
-    # Verificar versión de Dart
-    DART_VERSION=\$(flutter --version | grep -i "dart" | awk '{print \$2}' 2>/dev/null || echo "unknown")
-    echo "  📌 Versión de Dart: \$DART_VERSION"
-    
-    # Verificar si necesita actualización (Dart debe ser >= 3.10.4)
-    NEEDS_UPDATE=false
-    if [ "\$DART_VERSION" != "unknown" ]; then
-        # Comparar versiones de Dart (formato: 3.10.4)
-        DART_MAJOR=\$(echo \$DART_VERSION | cut -d. -f1)
-        DART_MINOR=\$(echo \$DART_VERSION | cut -d. -f2)
-        DART_PATCH=\$(echo \$DART_VERSION | cut -d. -f3)
-        
-        if [ "\$DART_MAJOR" -lt 3 ] || ([ "\$DART_MAJOR" -eq 3 ] && [ "\$DART_MINOR" -lt 10 ]) || ([ "\$DART_MAJOR" -eq 3 ] && [ "\$DART_MINOR" -eq 10 ] && [ "\$DART_PATCH" -lt 4 ]); then
-            NEEDS_UPDATE=true
-        fi
-    else
-        NEEDS_UPDATE=true
-    fi
-    
-    if [ "\$NEEDS_UPDATE" = true ]; then
-        echo "  → Actualizando Flutter a la última versión estable..."
-        cd /home/ec2-user/flutter
-        git fetch origin stable 2>&1 || true
-        git reset --hard origin/stable 2>&1 || true
-        git pull origin stable 2>&1 || true
-        flutter upgrade --force 2>&1 || {
-            echo "  ⚠️  flutter upgrade falló, intentando reinstalar..."
-            cd /home/ec2-user
-            rm -rf flutter
-            git clone https://github.com/flutter/flutter.git -b stable --depth 1
-        }
-    else
-        echo "  ✅ Flutter ya tiene Dart >= 3.10.4"
-    fi
-    
-    echo "  📋 Versión de Flutter instalada:"
-    flutter --version
-ENDSSH
-
-echo "  ✅ Flutter listo"
-echo ""
-
-# ============================================================================
-# PASO 7: Compilar Flutter Web
-# ============================================================================
-
-echo "🏗️  Paso 7: Compilando Flutter Web (modo release)..."
-
-ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH | tee -a "$HISTORY_FILE"
-    set -e
-    
-    REPO_NAME="$REPO_NAME"
-    PORTAL_DIR="/home/ec2-user/\${REPO_NAME}/shopping_exercise_portal"
-    
-    export PATH="\$PATH:/home/ec2-user/flutter/bin"
-    
-    echo "  → Navegando a directorio del portal..."
-    if [ ! -d "\$PORTAL_DIR" ]; then
-        echo "  ❌ ERROR: Directorio no encontrado: \$PORTAL_DIR"
-        exit 1
-    fi
-    
-    cd "\$PORTAL_DIR"
-    echo "  ✅ Directorio actual: \$(pwd)"
-    
-    echo "  → Obteniendo dependencias..."
-    flutter pub get || {
-        echo "  ❌ ERROR: Falló flutter pub get"
-        exit 1
-    }
-    
-    echo "  → Compilando para web (release)..."
-    # Intentar con --wasm primero (Flutter 3.x+), luego sin él
-    if flutter build web --release --wasm 2>&1; then
-        echo "  ✅ Compilación completada con --wasm"
-    elif flutter build web --release 2>&1; then
-        echo "  ✅ Compilación completada (sin --wasm)"
-    else
-        echo "  ❌ ERROR: Falló la compilación de Flutter"
-        echo "  💡 Verificando directorio build..."
-        ls -la build/ 2>/dev/null || echo "  (Directorio build no existe)"
-        exit 1
-    fi
-    
-    # Verificar que el directorio build/web existe
-    if [ ! -d "build/web" ]; then
-        echo "  ❌ ERROR: Directorio build/web no existe después de la compilación"
-        echo "  💡 Contenido del directorio build:"
-        ls -la build/ 2>/dev/null || echo "  (Directorio build no existe)"
-        exit 1
-    fi
-    
-    echo "  ✅ Directorio build/web verificado"
-    echo "  📁 Contenido de build/web:"
-    ls -la build/web/ | head -10
-ENDSSH
-
-echo "  ✅ Build completado"
-echo ""
-
-# ============================================================================
-# PASO 8: Configurar nginx para /portal
-# ============================================================================
-
-echo "🌐 Paso 8: Configurando nginx para /portal..."
+echo "🌐 Paso 7: Copiando archivos compilados y configurando nginx para /portal..."
 
 ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH | tee -a "$HISTORY_FILE"
     set -e
@@ -380,13 +394,47 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
     PORTAL_DIR="/home/ec2-user/\${REPO_NAME}/shopping_exercise_portal"
     NGINX_PORTAL_DIR="/var/www/html/portal"
     
-    echo "  → Verificando que build/web existe..."
-    if [ ! -d "\$PORTAL_DIR/build/web" ]; then
-        echo "  ❌ ERROR: Directorio build/web no existe en \$PORTAL_DIR"
-        echo "  💡 Verificando estructura del proyecto:"
-        ls -la "\$PORTAL_DIR/" | head -10
+    echo "  → Verificando estructura del repositorio..."
+    echo "  📁 Repositorio: /home/ec2-user/\$REPO_NAME"
+    
+    # Verificar que el repositorio existe
+    if [ ! -d "/home/ec2-user/\$REPO_NAME" ]; then
+        echo "  ❌ ERROR: Repositorio no encontrado: /home/ec2-user/\$REPO_NAME"
+        echo "  💡 Directorios disponibles en /home/ec2-user:"
+        ls -la /home/ec2-user/ | head -10
         exit 1
     fi
+    
+    # Verificar que el directorio del portal existe
+    if [ ! -d "\$PORTAL_DIR" ]; then
+        echo "  ❌ ERROR: Directorio del portal no encontrado: \$PORTAL_DIR"
+        echo "  💡 Contenido del repositorio:"
+        ls -la "/home/ec2-user/\$REPO_NAME" | head -15
+        exit 1
+    fi
+    
+    echo "  ✅ Directorio del portal encontrado: \$PORTAL_DIR"
+    
+    # Verificar que build/web existe
+    echo "  → Verificando que los archivos compilados existan..."
+    if [ ! -d "\$PORTAL_DIR/build/web" ]; then
+        echo "  ❌ ERROR: Directorio build/web no encontrado en \$PORTAL_DIR"
+        echo "  💡 Estructura del directorio del portal:"
+        ls -la "\$PORTAL_DIR" | head -15
+        if [ -d "\$PORTAL_DIR/build" ]; then
+            echo "  💡 Contenido de build:"
+            ls -la "\$PORTAL_DIR/build" | head -10
+        else
+            echo "  💡 El directorio build no existe"
+        fi
+        echo ""
+        echo "  💡 Asegúrate de haber compilado el portal en tu laptop y commiteado los archivos"
+        echo "  💡 Ejecuta: cd shopping_exercise_portal && flutter build web --release"
+        echo "  💡 Luego commitea: git add build/web && git commit -m 'Build portal' && git push"
+        exit 1
+    fi
+    
+    echo "  ✅ Archivos compilados encontrados en \$PORTAL_DIR/build/web"
     
     echo "  → Copiando archivos build a nginx..."
     sudo mkdir -p "\$NGINX_PORTAL_DIR"
@@ -404,27 +452,165 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
     
     sudo chown -R nginx:nginx "\$NGINX_PORTAL_DIR"
     echo "  ✅ Archivos copiados correctamente"
+    
+    # Verificar que index.html existe
+    if [ ! -f "\$NGINX_PORTAL_DIR/index.html" ]; then
+        echo "  ❌ ERROR: index.html no encontrado en \$NGINX_PORTAL_DIR"
+        echo "  💡 Contenido del directorio:"
+        ls -la "\$NGINX_PORTAL_DIR" | head -15
+        exit 1
+    fi
+    
+    echo "  ✅ index.html encontrado"
+    
+    # Verificar que el base-href se aplicó correctamente en index.html
+    echo "  → Verificando base-href en index.html..."
+    if grep -q 'base href="/portal/"' "\$NGINX_PORTAL_DIR/index.html" 2>/dev/null; then
+        echo "  ✅ base-href correcto en index.html"
+    else
+        echo "  ⚠️  ADVERTENCIA: base-href puede no estar configurado correctamente"
+        echo "  💡 Contenido de base tag en index.html:"
+        grep -i 'base href' "\$NGINX_PORTAL_DIR/index.html" || echo "  (No se encontró base tag)"
+    fi
+    
     echo "  📁 Contenido de \$NGINX_PORTAL_DIR:"
     ls -la "\$NGINX_PORTAL_DIR" | head -10
     
     echo "  → Actualizando configuración de nginx..."
-    # Leer configuración actual y agregar /portal si no existe
-    if ! sudo grep -q "location /portal" /etc/nginx/conf.d/shopping-app.conf 2>/dev/null; then
-        # Agregar configuración de /portal antes del cierre del server block
-        sudo sed -i '/^}$/i\
-    # Flutter Portal en /portal\
-    location /portal {\
-        alias /var/www/html/portal;\
-        try_files \$uri \$uri/ /portal/index.html;\
-        index index.html;\
-    }' /etc/nginx/conf.d/shopping-app.conf
-    fi
+    
+    # Limpiar otras configuraciones que puedan causar conflicto
+    echo "  → Limpiando configuraciones antiguas de nginx..."
+    sudo rm -f /etc/nginx/conf.d/default.conf 2>/dev/null || true
+    sudo rm -f /etc/nginx/conf.d/flutter-app.conf 2>/dev/null || true
+    sudo rm -f /etc/nginx/conf.d/flutter-portal.conf 2>/dev/null || true
+    
+    # Crear configuración completa de nginx
+    sudo tee /etc/nginx/conf.d/shopping-app.conf > /dev/null << 'NGINXCONF'
+server {
+    listen 80;
+    server_name _;
+    
+    # Backend API en /api
+    location /api {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
+        proxy_cache_bypass \$http_upgrade;
+        
+        # Headers para CORS (si el backend no los maneja completamente)
+        add_header Access-Control-Allow-Origin * always;
+        add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Authorization, Content-Type, X-Requested-With" always;
+        
+        # Manejar preflight OPTIONS
+        if (\$request_method = OPTIONS) {
+            return 204;
+        }
+        
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        
+        # Buffer settings para peticiones grandes
+        proxy_buffering off;
+        proxy_request_buffering off;
+    }
+    
+    # Health check directo
+    location /health {
+        proxy_pass http://localhost:3000/health;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+    }
+    
+    # Flutter App en /app (si existe)
+    location /app {
+        root /var/www/html;
+        try_files \$uri \$uri/ /app/index.html;
+        index index.html;
+    }
+    
+    # No cachear index.html del portal
+    location = /portal/index.html {
+        root /var/www/html;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Expires "0";
+    }
+    
+    # Servir archivos estáticos de Flutter con cache largo
+    location ~* ^/portal/(assets|canvaskit|icons)/ {
+        root /var/www/html;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+    
+    # Servir archivos JS y WASM de Flutter
+    location ~* ^/portal/.*\.(js|wasm)$ {
+        root /var/www/html;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        add_header Content-Type "application/javascript" always;
+    }
+    
+    # Flutter Portal en /portal
+    location /portal {
+        root /var/www/html;
+        try_files \$uri \$uri/ /portal/index.html;
+        index index.html;
+        
+        # Headers importantes para Flutter
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+    }
+    
+    # Redirigir raíz a /app (o /portal si /app no existe)
+    location = / {
+        return 301 /app;
+    }
+    
+    # Gzip compression
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css text/xml text/javascript application/javascript application/xml+rss application/json;
+}
+NGINXCONF
     
     echo "  → Probando configuración de nginx..."
     sudo nginx -t
     
     echo "  → Reiniciando nginx..."
     sudo systemctl restart nginx
+    
+    echo "  → Verificando que el backend esté accesible..."
+    sleep 2
+    if curl -s -f -m 5 http://localhost:3000/health >/dev/null 2>&1; then
+        echo "  ✅ Backend responde en localhost:3000"
+    else
+        echo "  ⚠️  ADVERTENCIA: Backend no responde en localhost:3000"
+        echo "  💡 Verifica que los contenedores Docker estén corriendo:"
+        echo "     sudo docker ps"
+        echo "     sudo docker logs shopping_api"
+    fi
+    
+    echo "  → Verificando que el proxy funcione..."
+    if curl -s -f -m 5 http://localhost/api/health >/dev/null 2>&1; then
+        echo "  ✅ Proxy de nginx funciona correctamente"
+    else
+        echo "  ⚠️  ADVERTENCIA: Proxy de nginx no responde"
+        echo "  💡 Verifica la configuración de nginx:"
+        echo "     sudo nginx -t"
+        echo "     sudo tail -f /var/log/nginx/error.log"
+    fi
     
     echo "  ✅ nginx configurado para /portal"
 ENDSSH

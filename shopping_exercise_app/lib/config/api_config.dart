@@ -1,6 +1,18 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 class ApiConfig {
   // URL base del backend
-  static const String baseUrl = 'http://localhost:3000/api';
+  // En web: usa ruta relativa que funciona con el proxy de nginx
+  // En desarrollo local (mobile/desktop): usa localhost
+  static String get baseUrl {
+    if (kIsWeb) {
+      // En web, usar ruta relativa - nginx proxy maneja /api -> localhost:3000
+      return '/api';
+    } else {
+      // En desarrollo local (mobile/desktop), usar localhost
+      return 'http://localhost:3000/api';
+    }
+  }
   
   // Endpoints
   static const String auth = '/auth';
