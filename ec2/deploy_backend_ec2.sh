@@ -619,12 +619,52 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
     if [ "$RUNNING_CONTAINERS" -gt 0 ] 2>/dev/null; then
         echo "  → Contenedores ya están corriendo, verificando estado..."
         sudo docker ps --filter "name=shopping_"
-        echo "  → Si necesitas reiniciarlos, ejecuta: sudo docker-compose down && sudo docker-compose up -d"
+        
+        # Verificar si el contenedor API tiene DB_SSL configurado y código actualizado
+        echo "  → Verificando configuración del contenedor API..."
+        NEEDS_REBUILD=false
+        
+        if sudo docker inspect shopping_api 2>/dev/null | grep -q '"DB_SSL"'; then
+            DB_SSL_VALUE=$(sudo docker inspect shopping_api 2>/dev/null | grep -A 1 '"DB_SSL"' | grep '"Value"' | cut -d'"' -f4 || echo "")
+            if [ "$DB_SSL_VALUE" != "false" ]; then
+                echo "  ⚠️  Contenedor API tiene DB_SSL=$DB_SSL_VALUE (debería ser false)"
+                NEEDS_REBUILD=true
+            fi
+        else
+            echo "  ⚠️  Contenedor API no tiene DB_SSL configurado"
+            NEEDS_REBUILD=true
+        fi
+        
+        # Verificar si el código de database.js está actualizado (contiene DB_SSL check)
+        if sudo docker exec shopping_api grep -q "process.env.DB_SSL === 'true'" /app/src/config/database.js 2>/dev/null; then
+            echo "  ✅ Código de database.js está actualizado"
+        else
+            echo "  ⚠️  Código de database.js puede no estar actualizado"
+            NEEDS_REBUILD=true
+        fi
+        
+        if [ "$NEEDS_REBUILD" = true ]; then
+            echo "  → Reconstruyendo contenedores para aplicar configuración correcta..."
+            sudo docker-compose down 2>/dev/null || sudo docker compose down 2>/dev/null || true
+            # Detener contenedores manualmente si existen
+            sudo docker stop shopping_api 2>/dev/null || true
+            sudo docker rm shopping_api 2>/dev/null || true
+            RUNNING_CONTAINERS=0
+        else
+            echo "  ✅ Contenedor API tiene configuración correcta"
+        fi
+        
+        if [ "$RUNNING_CONTAINERS" -gt 0 ] 2>/dev/null; then
+            echo "  → Si necesitas reiniciarlos, ejecuta: sudo docker-compose down && sudo docker-compose up -d --build"
+        fi
     else
         echo "  → No hay contenedores corriendo, iniciando..."
         
-        echo "  → Deteniendo contenedores existentes (si hay)..."
+        echo "  → Deteniendo y eliminando contenedores existentes (si hay)..."
         sudo docker-compose down 2>/dev/null || sudo docker compose down 2>/dev/null || true
+        # También eliminar contenedores manualmente si existen
+        sudo docker stop shopping_api shopping_postgres shopping_adminer 2>/dev/null || true
+        sudo docker rm shopping_api shopping_postgres shopping_adminer 2>/dev/null || true
         
         echo "  → Construyendo imágenes Docker..."
         # Verificar que docker-compose funcione antes de usarlo
@@ -682,19 +722,19 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
         # Actualizar NODE_ENV a production si está en development
         sudo sed -i "s/NODE_ENV: development/NODE_ENV: production/" docker-compose.yml 2>/dev/null || true
         
-        echo "  → Iniciando contenedores..."
+        echo "  → Iniciando contenedores (reconstruyendo si es necesario)..."
         # Verificar que docker-compose funcione antes de usarlo
         if docker compose version &> /dev/null 2>&1; then
-            if sudo docker compose up -d 2>&1; then
-                echo "  ✅ Contenedores iniciados"
+            if sudo docker compose up -d --build 2>&1; then
+                echo "  ✅ Contenedores iniciados y reconstruidos"
             else
                 echo "  ❌ ERROR: Falló al iniciar contenedores"
                 echo "  💡 Revisa los logs con: sudo docker compose logs"
                 exit 1
             fi
         elif docker-compose version &> /dev/null 2>&1; then
-            if sudo docker-compose up -d 2>&1; then
-                echo "  ✅ Contenedores iniciados"
+            if sudo docker-compose up -d --build 2>&1; then
+                echo "  ✅ Contenedores iniciados y reconstruidos"
             else
                 echo "  ❌ ERROR: Falló al iniciar contenedores"
                 echo "  💡 Revisa los logs con: sudo docker-compose logs"
@@ -860,18 +900,25 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
         USER_COUNT=$(sudo docker exec shopping_postgres psql -U postgres -d shopping_db -t -c "SELECT COUNT(*) FROM users;" 2>/dev/null | tr -d ' ' || echo "0")
         if [ "$USER_COUNT" = "0" ] || [ -z "$USER_COUNT" ]; then
             echo "  ⚠️  La base de datos está vacía (sin usuarios)"
-            echo "  → Creando usuario público..."
+            echo "  → Creando usuarios del sistema..."
+            
+            # Crear usuario público
             if [ -f "api/add_public_user.js" ]; then
-                # Usar DATABASE_URL con el nombre correcto del contenedor
                 if sudo docker exec -e DATABASE_URL="postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db" shopping_api node add_public_user.js 2>&1; then
                     echo "  ✅ Usuario público creado correctamente"
                 else
                     echo "  ⚠️  No se pudo crear el usuario público automáticamente"
-                    echo "  💡 Puedes ejecutarlo manualmente:"
-                    echo "     sudo docker exec -e DATABASE_URL='postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db' shopping_api node add_public_user.js"
                 fi
-            else
-                echo "  ⚠️  No se encontró api/add_public_user.js"
+            fi
+            
+            # Crear usuario de prueba
+            if [ -f "api/add_test_user.js" ]; then
+                sleep 1
+                if sudo docker exec -e DATABASE_URL="postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db" shopping_api node add_test_user.js 2>&1; then
+                    echo "  ✅ Usuario de prueba creado correctamente"
+                else
+                    echo "  ⚠️  No se pudo crear el usuario de prueba automáticamente"
+                fi
             fi
         else
             echo "  ✅ La base de datos tiene $USER_COUNT usuario(s)"
@@ -911,11 +958,14 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
         fi
     fi
     
-    # Crear usuario público si no existe (después de verificar/crear tablas)
+    # Crear usuarios si no existen (después de verificar/crear tablas)
     echo ""
+    echo "  → Verificando usuarios del sistema..."
+    
+    # Verificar y crear usuario público
     echo "  → Verificando si existe el usuario público..."
-    USER_COUNT=$(sudo docker exec shopping_postgres psql -U postgres -d shopping_db -t -c "SELECT COUNT(*) FROM users WHERE email = 'user@ejemplo.com';" 2>/dev/null | tr -d ' ' || echo "0")
-    if [ "$USER_COUNT" = "0" ] || [ -z "$USER_COUNT" ]; then
+    USER_PUBLIC_COUNT=$(sudo docker exec shopping_postgres psql -U postgres -d shopping_db -t -c "SELECT COUNT(*) FROM users WHERE email = 'user@ejemplo.com';" 2>/dev/null | tr -d ' ' || echo "0")
+    if [ "$USER_PUBLIC_COUNT" = "0" ] || [ -z "$USER_PUBLIC_COUNT" ]; then
         echo "  ⚠️  El usuario público no existe"
         echo "  → Creando usuario público..."
         if [ -f "api/add_public_user.js" ]; then
@@ -933,6 +983,29 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
         fi
     else
         echo "  ✅ El usuario público ya existe"
+    fi
+    
+    # Verificar y crear usuario de prueba
+    echo "  → Verificando si existe el usuario de prueba..."
+    USER_TEST_COUNT=$(sudo docker exec shopping_postgres psql -U postgres -d shopping_db -t -c "SELECT COUNT(*) FROM users WHERE email = 'test@ejemplo.com';" 2>/dev/null | tr -d ' ' || echo "0")
+    if [ "$USER_TEST_COUNT" = "0" ] || [ -z "$USER_TEST_COUNT" ]; then
+        echo "  ⚠️  El usuario de prueba no existe"
+        echo "  → Creando usuario de prueba..."
+        if [ -f "api/add_test_user.js" ]; then
+            sleep 2  # Esperar un poco para que las tablas estén listas
+            # Usar DATABASE_URL con el nombre correcto del contenedor
+            if sudo docker exec -e DATABASE_URL="postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db" shopping_api node add_test_user.js 2>&1; then
+                echo "  ✅ Usuario de prueba creado correctamente"
+            else
+                echo "  ⚠️  No se pudo crear el usuario de prueba automáticamente"
+                echo "  💡 Puedes ejecutarlo manualmente:"
+                echo "     sudo docker exec -e DATABASE_URL='postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db' shopping_api node add_test_user.js"
+            fi
+        else
+            echo "  ⚠️  No se encontró api/add_test_user.js"
+        fi
+    else
+        echo "  ✅ El usuario de prueba ya existe"
     fi
     
     
@@ -1021,8 +1094,8 @@ server {
     }
     
     # Adminer - Database Management UI en /adminer
-    location /adminer {
-        proxy_pass http://localhost:8080;
+    location /adminer/ {
+        proxy_pass http://localhost:8080/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -1030,10 +1103,19 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Forwarded-Port \$server_port;
         proxy_cache_bypass \$http_upgrade;
         
-        # Rewrite para que Adminer funcione correctamente
-        rewrite ^/adminer/?(.*) /\$1 break;
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+    
+    # Redirect /adminer to /adminer/
+    location = /adminer {
+        return 301 /adminer/;
     }
     
     # Redirigir raíz a /api por ahora (se actualizará cuando haya apps Flutter)
@@ -1068,6 +1150,27 @@ NGINXCONF
     sleep 2
     if sudo systemctl is-active --quiet nginx; then
         echo "  ✅ nginx configurado y corriendo"
+        
+        # Verificar que Adminer esté accesible directamente
+        echo "  → Verificando que Adminer esté accesible..."
+        if curl -s -f -m 5 http://localhost:8080 >/dev/null 2>&1; then
+            echo "  ✅ Adminer responde en localhost:8080"
+        else
+            echo "  ⚠️  ADVERTENCIA: Adminer no responde en localhost:8080"
+            echo "  💡 Verifica que el contenedor esté corriendo:"
+            echo "     sudo docker ps | grep adminer"
+            echo "     sudo docker logs shopping_adminer --tail 20"
+        fi
+        
+        # Verificar que el proxy de Adminer funcione
+        echo "  → Verificando que el proxy de Adminer funcione..."
+        if curl -s -f -m 5 http://localhost/adminer/ >/dev/null 2>&1; then
+            echo "  ✅ Proxy de Adminer funciona correctamente"
+        else
+            echo "  ⚠️  ADVERTENCIA: Proxy de Adminer no responde"
+            echo "  💡 Verifica la configuración de nginx:"
+            echo "     sudo tail -20 /var/log/nginx/error.log"
+        fi
     else
         echo "  ⚠️  nginx puede no estar corriendo"
         echo "  💡 Verifica con: sudo systemctl status nginx"
