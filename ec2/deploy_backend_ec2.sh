@@ -620,6 +620,64 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
         echo "  → Contenedores ya están corriendo, verificando estado..."
         sudo docker ps --filter "name=shopping_"
         
+        # Verificar que PostgreSQL esté corriendo
+        if ! sudo docker ps --format "{{.Names}}" | grep -q "^shopping_postgres$"; then
+            echo "  ⚠️  PostgreSQL no está corriendo, iniciándolo..."
+            if sudo docker ps -a --format "{{.Names}}" | grep -q "^shopping_postgres$"; then
+                echo "  → Iniciando contenedor PostgreSQL existente..."
+                sudo docker start shopping_postgres 2>/dev/null || {
+                    echo "  ⚠️  No se pudo iniciar PostgreSQL existente, creando nuevo..."
+                    # Crear red si no existe
+                    sudo docker network create shopping_network 2>/dev/null || true
+                    # Crear nuevo contenedor PostgreSQL
+                    INIT_SQL_PATH=""
+                    if [ -f "database/init.sql" ]; then
+                        INIT_SQL_PATH="$(pwd)/database/init.sql"
+                    fi
+                    POSTGRES_CMD="sudo docker run -d \
+                        --name shopping_postgres \
+                        --network shopping_network \
+                        -e POSTGRES_PASSWORD=postgres123 \
+                        -e POSTGRES_DB=shopping_db \
+                        -e POSTGRES_USER=postgres"
+                    if [ -n "\$INIT_SQL_PATH" ]; then
+                        POSTGRES_CMD="\$POSTGRES_CMD -v \$INIT_SQL_PATH:/docker-entrypoint-initdb.d/init.sql"
+                    fi
+                    POSTGRES_CMD="\$POSTGRES_CMD postgres:15-alpine"
+                    eval \$POSTGRES_CMD || {
+                        echo "  ❌ ERROR: No se pudo crear contenedor PostgreSQL"
+                        exit 1
+                    }
+                }
+                sleep 5  # Esperar a que PostgreSQL esté listo
+            else
+                echo "  ⚠️  Contenedor PostgreSQL no existe, creándolo..."
+                # Crear red si no existe
+                sudo docker network create shopping_network 2>/dev/null || true
+                INIT_SQL_PATH=""
+                if [ -f "database/init.sql" ]; then
+                    INIT_SQL_PATH="$(pwd)/database/init.sql"
+                fi
+                POSTGRES_CMD="sudo docker run -d \
+                    --name shopping_postgres \
+                    --network shopping_network \
+                    -e POSTGRES_PASSWORD=postgres123 \
+                    -e POSTGRES_DB=shopping_db \
+                    -e POSTGRES_USER=postgres"
+                if [ -n "\$INIT_SQL_PATH" ]; then
+                    POSTGRES_CMD="\$POSTGRES_CMD -v \$INIT_SQL_PATH:/docker-entrypoint-initdb.d/init.sql"
+                fi
+                POSTGRES_CMD="\$POSTGRES_CMD postgres:15-alpine"
+                eval \$POSTGRES_CMD || {
+                    echo "  ❌ ERROR: No se pudo crear contenedor PostgreSQL"
+                    exit 1
+                }
+                sleep 5
+            fi
+        else
+            echo "  ✅ PostgreSQL está corriendo"
+        fi
+        
         # Verificar si el contenedor API tiene DB_SSL configurado y código actualizado
         echo "  → Verificando configuración del contenedor API..."
         NEEDS_REBUILD=false
@@ -644,18 +702,72 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
         fi
         
         if [ "$NEEDS_REBUILD" = true ]; then
-            echo "  → Reconstruyendo contenedores para aplicar configuración correcta..."
-            sudo docker-compose down 2>/dev/null || sudo docker compose down 2>/dev/null || true
-            # Detener contenedores manualmente si existen
+            echo "  → Reconstruyendo contenedor API para aplicar configuración correcta..."
+            # Detener y eliminar solo el API, no PostgreSQL
             sudo docker stop shopping_api 2>/dev/null || true
             sudo docker rm shopping_api 2>/dev/null || true
-            RUNNING_CONTAINERS=0
+            
+            # Reconstruir la imagen
+            if [ -f "api/Dockerfile" ]; then
+                echo "  → Reconstruyendo imagen del API..."
+                sudo docker build -t shopping_exercise_backend-api:latest -f api/Dockerfile api/ || {
+                    echo "  ❌ ERROR: Falló la reconstrucción del API"
+                    exit 1
+                }
+            fi
+            
+            # Crear nuevo contenedor API con configuración correcta
+            echo "  → Creando nuevo contenedor API con configuración correcta..."
+            sudo docker run -d \
+                --name shopping_api \
+                --network shopping_network \
+                -p 3000:3000 \
+                -e NODE_ENV=production \
+                -e PORT=3000 \
+                -e DATABASE_URL=postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db \
+                -e DB_SSL=false \
+                shopping_exercise_backend-api:latest || {
+                echo "  ❌ ERROR: No se pudo crear contenedor API"
+                exit 1
+            }
+            echo "  ✅ Contenedor API reconstruido y reiniciado"
+            sleep 3  # Esperar a que el API inicie
         else
             echo "  ✅ Contenedor API tiene configuración correcta"
         fi
         
-        if [ "$RUNNING_CONTAINERS" -gt 0 ] 2>/dev/null; then
-            echo "  → Si necesitas reiniciarlos, ejecuta: sudo docker-compose down && sudo docker-compose up -d --build"
+        # Verificar e iniciar Adminer si no está corriendo
+        if ! sudo docker ps --format "{{.Names}}" | grep -q "^shopping_adminer$"; then
+            echo "  ⚠️  Adminer no está corriendo, iniciándolo..."
+            if sudo docker ps -a --format "{{.Names}}" | grep -q "^shopping_adminer$"; then
+                echo "  → Iniciando contenedor Adminer existente..."
+                sudo docker start shopping_adminer 2>/dev/null || {
+                    echo "  ⚠️  No se pudo iniciar Adminer existente, creando nuevo..."
+                    sudo docker rm shopping_adminer 2>/dev/null || true
+                    # Crear red si no existe
+                    sudo docker network create shopping_network 2>/dev/null || true
+                    sudo docker run -d \
+                        --name shopping_adminer \
+                        --network shopping_network \
+                        -p 8080:8080 \
+                        adminer:latest || {
+                        echo "  ❌ ERROR: No se pudo crear contenedor Adminer"
+                    }
+                }
+            else
+                echo "  → Creando contenedor Adminer..."
+                # Crear red si no existe
+                sudo docker network create shopping_network 2>/dev/null || true
+                sudo docker run -d \
+                    --name shopping_adminer \
+                    --network shopping_network \
+                    -p 8080:8080 \
+                    adminer:latest || {
+                    echo "  ❌ ERROR: No se pudo crear contenedor Adminer"
+                }
+            fi
+        else
+            echo "  ✅ Adminer está corriendo"
         fi
     else
         echo "  → No hay contenedores corriendo, iniciando..."
@@ -842,10 +954,23 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
                 fi
             fi
             
-            # Iniciar Adminer
-            if sudo docker ps -a --format "{{.Names}}" | grep -q "^shopping_adminer$"; then
+            # Verificar e iniciar Adminer
+            if sudo docker ps --format "{{.Names}}" | grep -q "^shopping_adminer$"; then
+                echo "  ✅ Adminer ya está corriendo"
+            elif sudo docker ps -a --format "{{.Names}}" | grep -q "^shopping_adminer$"; then
                 echo "  → Iniciando contenedor Adminer existente..."
-                sudo docker start shopping_adminer 2>/dev/null || true
+                sudo docker start shopping_adminer 2>/dev/null || {
+                    echo "  ⚠️  No se pudo iniciar Adminer existente, creando nuevo..."
+                    sudo docker rm shopping_adminer 2>/dev/null || true
+                    sudo docker run -d \
+                        --name shopping_adminer \
+                        --network shopping_network \
+                        -p 8080:8080 \
+                        adminer:latest || {
+                        echo "  ❌ ERROR: No se pudo crear contenedor Adminer"
+                        exit 1
+                    }
+                }
             else
                 echo "  → Creando contenedor Adminer..."
                 sudo docker run -d \
