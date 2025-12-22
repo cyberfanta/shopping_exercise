@@ -203,6 +203,18 @@ else
 fi
 echo ""
 
+echo "→ YOUTUBE_API_KEY:"
+YOUTUBE_KEY_FOUND=$(sudo docker inspect shopping_api --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep YOUTUBE_API_KEY || echo "")
+if [ -z "$YOUTUBE_KEY_FOUND" ]; then
+    echo -e "${RED}❌ YOUTUBE_API_KEY NO encontrado - el contenedor necesita ser reconstruido${NC}"
+    echo "  💡 Ejecuta: sudo docker stop shopping_api && sudo docker rm shopping_api"
+    echo "  💡 Luego ejecuta el script de deployment para recrear el contenedor"
+else
+    echo -e "${GREEN}✅ YOUTUBE_API_KEY encontrado${NC}"
+    echo "  $YOUTUBE_KEY_FOUND"
+fi
+echo ""
+
 # ============================================================================
 # RESUMEN
 # ============================================================================

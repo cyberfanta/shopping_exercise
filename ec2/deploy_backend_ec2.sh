@@ -750,6 +750,7 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
                 -e DB_SSL=false \
                 -e JWT_SECRET=f3c9e8b1a47d2e9c5f0a3d7b9e6c1f4a8d2b7c9e1f0a4b3c7d9e2f1a6c8b0d3 \
                 -e JWT_EXPIRES_IN=1d \
+                -e YOUTUBE_API_KEY=AIzaSyCzZQDv4ttuAhnqyYCX35xkMwv0xKK0jr8 \
                 shopping_exercise_backend-api:latest || {
                 echo "  ❌ ERROR: No se pudo crear contenedor API"
                 exit 1
@@ -930,6 +931,7 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
                         -e DB_SSL=false \
                         -e JWT_SECRET=f3c9e8b1a47d2e9c5f0a3d7b9e6c1f4a8d2b7c9e1f0a4b3c7d9e2f1a6c8b0d3 \
                         -e JWT_EXPIRES_IN=1d \
+                        -e YOUTUBE_API_KEY=AIzaSyCzZQDv4ttuAhnqyYCX35xkMwv0xKK0jr8 \
                         shopping_exercise_backend-api:latest || {
                         echo "  ❌ ERROR: No se pudo crear contenedor API"
                         exit 1
@@ -947,6 +949,7 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
                             -e DB_SSL=false \
                             -e JWT_SECRET=f3c9e8b1a47d2e9c5f0a3d7b9e6c1f4a8d2b7c9e1f0a4b3c7d9e2f1a6c8b0d3 \
                             -e JWT_EXPIRES_IN=1d \
+                            -e YOUTUBE_API_KEY=AIzaSyCzZQDv4ttuAhnqyYCX35xkMwv0xKK0jr8 \
                             shopping_exercise_backend-api:latest || {
                             echo "  ❌ ERROR: No se pudo crear contenedor API"
                             exit 1
@@ -964,6 +967,7 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
                         -e DB_SSL=false \
                         -e JWT_SECRET=f3c9e8b1a47d2e9c5f0a3d7b9e6c1f4a8d2b7c9e1f0a4b3c7d9e2f1a6c8b0d3 \
                         -e JWT_EXPIRES_IN=1d \
+                        -e YOUTUBE_API_KEY=AIzaSyCzZQDv4ttuAhnqyYCX35xkMwv0xKK0jr8 \
                         shopping_exercise_backend-api:latest || {
                         echo "  ❌ ERROR: No se pudo crear contenedor API"
                         exit 1

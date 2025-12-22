@@ -77,6 +77,7 @@ sudo docker run -d \
     -e DB_SSL=false \
     -e JWT_SECRET=f3c9e8b1a47d2e9c5f0a3d7b9e6c1f4a8d2b7c9e1f0a4b3c7d9e2f1a6c8b0d3 \
     -e JWT_EXPIRES_IN=1d \
+    -e YOUTUBE_API_KEY=AIzaSyCzZQDv4ttuAhnqyYCX35xkMwv0xKK0jr8 \
     shopping_exercise_backend-api:latest || {
     echo "❌ ERROR: No se pudo crear contenedor API"
     exit 1
@@ -107,6 +108,15 @@ if sudo docker inspect shopping_api --format '{{range .Config.Env}}{{println .}}
     sudo docker inspect shopping_api --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep JWT_SECRET
 else
     echo "  ❌ JWT_SECRET NO está configurado"
+fi
+echo ""
+
+echo "→ YOUTUBE_API_KEY:"
+if sudo docker inspect shopping_api --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep -q "YOUTUBE_API_KEY"; then
+    echo "  ✅ YOUTUBE_API_KEY está configurado"
+    sudo docker inspect shopping_api --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep YOUTUBE_API_KEY
+else
+    echo "  ❌ YOUTUBE_API_KEY NO está configurado"
 fi
 echo ""
 
