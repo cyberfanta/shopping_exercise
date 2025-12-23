@@ -2,6 +2,7 @@ const express = require('express');
 const { body, query } = require('express-validator');
 const productController = require('../controllers/product.controller');
 const authMiddleware = require('../middleware/auth.middleware');
+const adminMiddleware = require('../middleware/admin.middleware');
 
 const router = express.Router();
 
@@ -16,8 +17,8 @@ router.get('/', [
 // Get single product
 router.get('/:id', productController.getProductById);
 
-// Create product (protected)
-router.post('/', authMiddleware, [
+// Create product (protected - admin/superadmin only)
+router.post('/', authMiddleware, adminMiddleware, [
   body('name').notEmpty().trim(),
   body('description').optional().trim(),
   body('price').isFloat({ min: 0 }),
@@ -27,15 +28,15 @@ router.post('/', authMiddleware, [
   body('youtube_channel_name').optional().trim(),
 ], productController.createProduct);
 
-// Create multiple products (protected)
-router.post('/bulk', authMiddleware, [
+// Create multiple products (protected - admin/superadmin only)
+router.post('/bulk', authMiddleware, adminMiddleware, [
   body('products').isArray({ min: 1 }),
   body('products.*.name').notEmpty().trim(),
   body('products.*.price').isFloat({ min: 0 }),
 ], productController.createMultipleProducts);
 
-// Update product (protected)
-router.put('/:id', authMiddleware, [
+// Update product (protected - admin/superadmin only)
+router.put('/:id', authMiddleware, adminMiddleware, [
   body('name').optional().trim(),
   body('description').optional().trim(),
   body('price').optional().isFloat({ min: 0 }),
@@ -43,8 +44,8 @@ router.put('/:id', authMiddleware, [
   body('category_id').optional().isUUID()
 ], productController.updateProduct);
 
-// Delete product (protected)
-router.delete('/:id', authMiddleware, productController.deleteProduct);
+// Delete product (protected - admin/superadmin only)
+router.delete('/:id', authMiddleware, adminMiddleware, productController.deleteProduct);
 
 module.exports = router;
 
