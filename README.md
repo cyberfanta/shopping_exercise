@@ -1,5 +1,30 @@
 # Shopping Exercise
 
+## 🌐 Sitios Desplegados
+
+Todos los servicios están desplegados en EC2 y disponibles en:
+
+- **🏠 Landing Page**: [http://100.49.43.143/](http://100.49.43.143/)
+- **🛍️ App de Compras**: [http://100.49.43.143/app](http://100.49.43.143/app)
+- **⚙️ Portal Administrativo**: [http://100.49.43.143/portal](http://100.49.43.143/portal)
+- **🔌 API Backend**: [http://100.49.43.143/api](http://100.49.43.143/api)
+- **🗄️ Adminer (DB)**: [http://100.49.43.143/adminer](http://100.49.43.143/adminer)
+- **💚 Health Check**: [http://100.49.43.143/health](http://100.49.43.143/health)
+
+### 🔐 Credenciales de Prueba
+
+**App de Compras:**
+
+- Email: `user@ejemplo.com`
+- Password: `User123!`
+
+**Portal Administrativo:**
+
+- Email: `test@ejemplo.com`
+- Password: `Test123!`
+
+---
+
 Monorepo con 2 aplicaciones Flutter y backend.
 
 ## 📂 Estructura del Proyecto
