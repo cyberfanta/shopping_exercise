@@ -19,8 +19,6 @@ set -e
 
 EC2_INSTANCE_NAME="shopping-app"  # Misma instancia que backend/app/portal
 KEY_PAIR_NAME="aws-eb-shopping-exercise"
-GITHUB_REPO_URL="git@github.com:cyberfanta/shopping_exercise.git"
-ALLOWED_SSH_IP="38.74.224.33/32"
 
 # URLs de las aplicaciones
 APP_URL="http://100.49.43.143/app"
@@ -454,10 +452,18 @@ chmod 400 "$SSH_KEY" 2>/dev/null || true
 echo "  ✅ Clave SSH encontrada: $SSH_KEY"
 echo ""
 
-# Agregar clave al ssh-agent
-if command -v ssh-add &> /dev/null; then
-    ssh-add "$SSH_KEY" 2>/dev/null || true
+# Iniciar ssh-agent y agregar clave
+echo "  → Agregando clave al ssh-agent..."
+if command -v ssh-agent &> /dev/null; then
+    eval "$(ssh-agent -s)" >/dev/null 2>&1
+    ssh-add "$SSH_KEY" 2>/dev/null || {
+        echo "  ⚠️  No se pudo agregar la clave al ssh-agent (continuando de todas formas)"
+    }
+    echo "  ✅ Clave agregada al ssh-agent"
+else
+    echo "  ⚠️  ssh-agent no está disponible"
 fi
+echo ""
 
 # ============================================================================
 # PASO 3: Copiar archivos compilados a EC2
