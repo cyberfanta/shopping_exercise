@@ -305,6 +305,33 @@ fi
 
 echo "⏱️  Tiempo total: ${MINUTES}m ${SECONDS}s"
 echo ""
+
+# ============================================================================
+# LIMPIEZA: Eliminar carpeta del landing page
+# ============================================================================
+
+if [ "$DEPLOY_LANDING" = true ]; then
+    print_step "🧹 LIMPIEZA"
+    
+    LANDING_DIR="$PROJECT_ROOT/landing-page"
+    
+    if [ -d "$LANDING_DIR" ]; then
+        echo "  → Eliminando carpeta del landing page..."
+        rm -rf "$LANDING_DIR"
+        
+        if [ ! -d "$LANDING_DIR" ]; then
+            print_success "Carpeta del landing page eliminada"
+            echo "  💡 Esto evita commits accidentales de archivos compilados"
+        else
+            print_warning "No se pudo eliminar completamente la carpeta del landing page"
+            echo "  💡 Puedes eliminarla manualmente: rm -rf $LANDING_DIR"
+        fi
+    else
+        print_success "No hay carpeta del landing page para limpiar"
+    fi
+    echo ""
+fi
+
 echo "=========================================="
 echo ""
 
