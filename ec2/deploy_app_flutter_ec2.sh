@@ -33,8 +33,6 @@ KEY_PAIR_NAME="aws-eb-shopping-exercise"  # ⚠️ REQUERIDO: Nombre de tu key p
 EC2_INSTANCE_NAME="shopping-app"  # Nombre para la instancia (compartida con backend y portal)
 GITHUB_REPO_URL="git@github.com:cyberfanta/shopping_exercise.git"  # ⚠️ REQUERIDO: URL del repo
 GITHUB_TOKEN=""            # Opcional: Token para repos privados
-INSTANCE_TYPE="t3.micro"   # Tipo de instancia
-ALLOWED_SSH_IP="38.74.224.33/32"  # IP permitida para SSH
 
 # ============================================================================
 # VALIDACIÓN
@@ -433,7 +431,7 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
         else
             echo "  💡 El directorio build no existe"
         fi
-        echo ""
+echo ""
         echo "  💡 Asegúrate de haber compilado la app en tu laptop y commiteado los archivos"
         echo "  💡 Ejecuta: cd shopping_exercise_app && flutter build web --release"
         echo "  💡 Luego commitea: git add build/web && git commit -m 'Build app' && git push"

@@ -926,16 +926,16 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
                                 --network shopping_network \
                                 -p 3000:3000 \
                                 -e NODE_ENV=production \
-                        -e PORT=3000 \
-                        -e DATABASE_URL=postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db \
+                                -e PORT=3000 \
+                                -e DATABASE_URL=postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db \
                         -e DB_SSL=false \
                         -e JWT_SECRET=f3c9e8b1a47d2e9c5f0a3d7b9e6c1f4a8d2b7c9e1f0a4b3c7d9e2f1a6c8b0d3 \
                         -e JWT_EXPIRES_IN=1d \
                         -e YOUTUBE_API_KEY=AIzaSyCzZQDv4ttuAhnqyYCX35xkMwv0xKK0jr8 \
-                        shopping_exercise_backend-api:latest || {
-                        echo "  ❌ ERROR: No se pudo crear contenedor API"
-                        exit 1
-                    }
+                                shopping_exercise_backend-api:latest || {
+                                echo "  ❌ ERROR: No se pudo crear contenedor API"
+                                exit 1
+                            }
                         }
                     else
                         echo "  → Creando contenedor API manualmente..."
@@ -1149,7 +1149,7 @@ ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ec2-user@${PUBLIC_IP} << ENDSSH |
                 echo "  ⚠️  No se pudo crear el usuario de prueba automáticamente"
                 echo "  💡 Puedes ejecutarlo manualmente:"
                 echo "     sudo docker exec -e DATABASE_URL='postgresql://postgres:postgres123@shopping_postgres:5432/shopping_db' shopping_api node add_test_user.js"
-            fi
+    fi
         else
             echo "  ⚠️  No se encontró api/add_test_user.js"
         fi
@@ -1236,7 +1236,7 @@ server {
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
-        
+    
         # Buffer settings para peticiones grandes
         proxy_buffering off;
         proxy_request_buffering off;

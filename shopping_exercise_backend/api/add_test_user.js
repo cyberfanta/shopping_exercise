@@ -45,7 +45,7 @@ async function addTestUser() {
          role = EXCLUDED.role,
          is_active = EXCLUDED.is_active
        RETURNING id, email, first_name, last_name, role`,
-      [email, hash, 'Test', 'Usuario', '+123456789', 'user', true]
+      [email, hash, 'Test', 'Usuario', '+123456789', 'admin', true]
     );
     
     console.log('✅ Usuario creado/actualizado:', userResult.rows[0]);
@@ -75,7 +75,7 @@ async function addTestUser() {
     console.log('\n📋 Credenciales del usuario de prueba:');
     console.log('   Email: test@ejemplo.com');
     console.log('   Password: Test123!');
-    console.log('   Role: user');
+    console.log('   Role: admin');
     
   } catch (error) {
     console.error('❌ Error:', error);
