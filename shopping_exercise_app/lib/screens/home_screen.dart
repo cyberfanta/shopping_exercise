@@ -477,64 +477,133 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showLoginDialog(BuildContext context) {
     final emailController = TextEditingController();
     final passwordController = TextEditingController();
+    final firstNameController = TextEditingController();
+    final lastNameController = TextEditingController();
+    final phoneController = TextEditingController();
     final formKey = GlobalKey<FormState>();
     bool isLoading = false;
+    bool isRegisterMode = false;
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: const Text('Iniciar Sesión'),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: emailController,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: Icon(Icons.email_outlined),
+          title: Text(isRegisterMode ? 'Crear Cuenta' : 'Iniciar Sesión'),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isRegisterMode) ...[
+                    TextFormField(
+                      controller: firstNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Nombre',
+                        prefixIcon: Icon(Icons.person_outlined),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Ingresa tu nombre';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: lastNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Apellido',
+                        prefixIcon: Icon(Icons.person_outlined),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Ingresa tu apellido';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: phoneController,
+                      decoration: const InputDecoration(
+                        labelText: 'Teléfono (opcional)',
+                        prefixIcon: Icon(Icons.phone_outlined),
+                      ),
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  TextFormField(
+                    controller: emailController,
+                    decoration: const InputDecoration(
+                      labelText: 'Email',
+                      prefixIcon: Icon(Icons.email_outlined),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Ingresa tu email';
+                      }
+                      if (!value.contains('@')) {
+                        return 'Email inválido';
+                      }
+                      return null;
+                    },
                   ),
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Ingresa tu email';
-                    }
-                    if (!value.contains('@')) {
-                      return 'Email inválido';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: passwordController,
-                  decoration: const InputDecoration(
-                    labelText: 'Contraseña',
-                    prefixIcon: Icon(Icons.lock_outlined),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: passwordController,
+                    decoration: InputDecoration(
+                      labelText: isRegisterMode
+                          ? 'Contraseña (mín. 6 caracteres)'
+                          : 'Contraseña',
+                      prefixIcon: const Icon(Icons.lock_outlined),
+                    ),
+                    obscureText: true,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Ingresa tu contraseña';
+                      }
+                      if (isRegisterMode && value.length < 6) {
+                        return 'La contraseña debe tener al menos 6 caracteres';
+                      }
+                      return null;
+                    },
                   ),
-                  obscureText: true,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Ingresa tu contraseña';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Usuario de prueba:\ntest@ejemplo.com / Test123!',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+                  if (!isRegisterMode) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'Usuario de prueba:\nuser@ejemplo.com / User123!',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
           actions: [
+            TextButton(
+              onPressed: isLoading
+                  ? null
+                  : () {
+                setState(() {
+                  isRegisterMode = !isRegisterMode;
+                  // Limpiar campos al cambiar de modo
+                  emailController.clear();
+                  passwordController.clear();
+                  firstNameController.clear();
+                  lastNameController.clear();
+                  phoneController.clear();
+                  formKey.currentState?.reset();
+                });
+              },
+              child: Text(isRegisterMode ? 'Ya tengo cuenta' : 'Crear cuenta'),
+            ),
             TextButton(
               onPressed: isLoading ? null : () => Navigator.pop(context),
               child: const Text('Cancelar'),
@@ -548,25 +617,57 @@ class _HomeScreenState extends State<HomeScreen> {
                       setState(() => isLoading = true);
 
                       try {
-                        await context.read<AuthProvider>().login(
-                              emailController.text.trim(),
-                              passwordController.text,
-                            );
-
-                        if (context.mounted) {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Inicio de sesión exitoso'),
-                              backgroundColor: AppTheme.success,
-                              duration: Duration(seconds: 2),
-                            ),
+                        if (isRegisterMode) {
+                          // Registro
+                          await context.read<AuthProvider>().register(
+                            email: emailController.text.trim(),
+                            password: passwordController.text,
+                            firstName: firstNameController.text.trim(),
+                            lastName: lastNameController.text.trim(),
+                            phone: phoneController.text
+                                .trim()
+                                .isEmpty
+                                ? null
+                                : phoneController.text.trim(),
                           );
-                          // Recargar datos
-                          context.read<CartProvider>().loadCart();
-                          context
-                              .read<ProductProvider>()
-                              .loadProducts(refresh: true);
+
+                          if (context.mounted) {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Cuenta creada exitosamente'),
+                                backgroundColor: AppTheme.success,
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                            // Recargar datos
+                            context.read<CartProvider>().loadCart();
+                            context
+                                .read<ProductProvider>()
+                                .loadProducts(refresh: true);
+                          }
+                        } else {
+                          // Login
+                          await context.read<AuthProvider>().login(
+                            emailController.text.trim(),
+                            passwordController.text,
+                          );
+
+                          if (context.mounted) {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Inicio de sesión exitoso'),
+                                backgroundColor: AppTheme.success,
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                            // Recargar datos
+                            context.read<CartProvider>().loadCart();
+                            context
+                                .read<ProductProvider>()
+                                .loadProducts(refresh: true);
+                          }
                         }
                       } catch (e) {
                         setState(() => isLoading = false);
@@ -589,7 +690,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
-                  : const Text('Iniciar sesión'),
+                  : Text(isRegisterMode ? 'Crear cuenta' : 'Iniciar sesión'),
             ),
           ],
         ),
